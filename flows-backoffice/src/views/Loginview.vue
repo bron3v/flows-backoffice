@@ -44,7 +44,11 @@ import { useRouter } from 'vue-router'
 
 const form = reactive({ username: '', password: '' })
 const router = useRouter()
-function goHome () { router.push('/index') }
+function goHome () {
+  sessionStorage.setItem('flows_logged', '1'); // segna “loggato” per la sessione corrente
+  router.push('/');                            // vai alla home (root)
+}
+
 </script>
 
 <style scoped>
