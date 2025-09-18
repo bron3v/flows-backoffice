@@ -1,34 +1,40 @@
 <template>
-  <main class="auth-bg">
-    <div class="card">
-      <h1 class="title">Login</h1>
+  <main class="auth-shell">
+    <section class="flows-card">
+      <div class="brand">
+        <h2 id="brand-name">FLOWS BACKOFFICE</h2>
+      </div>
 
-      <form @submit.prevent="goHome">
-        <div class="form-group">
-          <label class="label">Username</label>
-          <input
-            v-model.trim="form.username"
-            type="text"
-            placeholder="Enter username"
-            required
-            class="input"
-          />
-        </div>
+      <div class="login-card">
+        <h1 class="title">Login</h1>
 
-        <div class="form-group">
-          <label class="label">Password</label>
-          <input
-            v-model="form.password"
-            type="password"
-            placeholder="Password"
-            required
-            class="input"
-          />
-        </div>
+        <form @submit.prevent="goHome">
+          <div class="form-group">
+            <input
+              v-model.trim="form.username"
+              type="email"
+              placeholder="E-mail"
+              required
+              class="input"
+            />
+          </div>
 
-        <button class="btn">Sign in</button>
-      </form>
-    </div>
+          <div class="form-group">
+            <input
+              v-model="form.password"
+              type="password"
+              placeholder="Password"
+              required
+              class="input"
+            />
+          </div>
+
+          <div>
+            <button class="btn">Login</button>
+          </div>
+        </form>
+      </div>
+    </section>
   </main>
 </template>
 
@@ -38,82 +44,105 @@ import { useRouter } from 'vue-router'
 
 const form = reactive({ username: '', password: '' })
 const router = useRouter()
-function goHome() { router.push('/index') } // autenticazione fittizia
+function goHome () { router.push('/index') }
 </script>
 
 <style scoped>
-/* Background scuro e centratura */
-.auth-bg {
+/* Sfondo esterno */
+.auth-shell {
   min-height: 100vh;
-  background: #2f3337;            /* grigio scuro come nello screenshot */
+  background: #bfc5c8;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 18px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-/* Card bianca */
-.card {
+
+.flows-card {
+  width: min(850px, 96vw);
+  min-height: 600px;
+  background: #17aba2;
+  border-radius: 28px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+  position: relative;
+  padding: 40px 28px 28px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  justify-items: center;     /* centra i figli orizzontalmente */
+  align-content: start;     
+}
+
+
+.brand {
   width: 100%;
-  max-width: 360px;
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
-  padding: 22px 20px;
+  text-align: center;        
+  margin: 6px 0 24px;
+}
+#brand-name {
+  margin: 0;
+  font-size: clamp(28px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: #ececef;
 }
 
-/* Titolo */
+
+.login-card {
+  width: min(380px, 90vw);
+  height:min(380px, 90vw) ;   
+  background: #ececef;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.16);
+  padding: 14px 16px 18px;   
+  text-align: center;        /* centra tutti i testi interni */
+}
+
 .title {
-  margin: 0 0 14px 0;
-  text-align: center;
-  font-size: 22px;
-  font-weight: 600;
-  color: #111827;
+  margin: 6px 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1cb5a9;
 }
 
-/* Gruppi form */
-.form-group { margin-bottom: 14px; }
-.label {
-  display: block;
-  font-size: 0.92rem;
-  color: #111827;
-  margin-bottom: 6px;
-}
+/* Campi input */
+.form-group { margin-bottom: 10px; }
 
-/* Input */
 .input {
   width: 100%;
   height: 40px;
-  padding: 8px 12px;
+  padding: 0;
   font-size: 14px;
   color: #111827;
   background: #fff;
-  border: 1px solid #ced4da;      /* look stile bootstrap-like */
+  border: 1px solid #1cb5a9;
   border-radius: 8px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
 }
-.input::placeholder { color: #9aa0a6; }
+.input::placeholder { color: #8fa3a9; }
 .input:focus {
-  border-color: #0d6efd;          /* blu del bottone */
-  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+  border-color: #15978f;
+  box-shadow: 0 0 0 3px rgba(28,181,169,.18);
 }
 
-/* Bottone */
 .btn {
   width: 100%;
   height: 42px;
-  margin-top: 6px;
-  border: 1px solid #0d6efd;
-  background: #0d6efd;
+  border: none;
+  background: #1cb5a9;
   color: #fff;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
   cursor: pointer;
-  transition: background-color .15s, border-color .15s;
+  transition: transform .06s ease, filter .15s ease;
 }
-.btn:hover {
-  background: #0b5ed7;
-  border-color: #0a58ca;
+.btn:hover { filter: brightness(0.96); }
+.btn:active { transform: translateY(1px); }
+
+/* Responsive */
+@media (max-width: 720px) {
+  #brand-name { font-size: clamp(28px, 8vw, 48px); }
 }
 </style>
