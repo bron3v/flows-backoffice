@@ -1,7 +1,9 @@
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <span class="logo-dot"></span>
+      <span class="logo-dot">
+        <img src="../assets/logo.png" alt="Logo Flows">
+      </span>
       <span class="brand-name">Flows Backoffice</span>
     </div>
 
@@ -35,9 +37,20 @@ import { RouterLink } from 'vue-router'
   padding:18px 18px 14px; border-bottom:1px solid rgba(255,255,255,.06);
 }
 .logo-dot{
-  width:22px; height:22px; border-radius:50%;
-  background:#6ee7b7; display:inline-block;
-  box-shadow:0 0 0 3px rgba(110,231,183,.15);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #6ee7b7;     /* verde di sfondo */
+  display: block;
+  overflow: hidden;         /* ritaglia nei bordi circolari */
+  box-shadow: 0 0 0 3px rgba(110,231,183,.15);
+}
+
+.logo-dot img{
+  width: 125%;
+  height: 110%;
+  object-fit: cover;        /* riempie tutto il cerchio */
+  display: block;
 }
 .brand-name{ font-weight:700; font-size:1.1rem; letter-spacing:.3px; color:#fff; }
 

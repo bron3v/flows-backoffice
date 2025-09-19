@@ -49,22 +49,21 @@
             <div class="kpi">
               <div class="kpi-icon users"></div>
               <div>
-                <div class="kpi-val">{{ kpi.newUsers.toLocaleString() }}</div>
-                <div class="kpi-label">Nuovi utenti</div>
+                <div class="kpi-val">{{ 50 }}</div>
+                <div class="kpi-label">Utenti totali</div>
               </div>
             </div>
             <div class="kpi">
               <div class="kpi-icon orders"></div>
               <div>
-                <div class="kpi-val">{{ kpi.orders.toLocaleString() }}</div>
-                <div class="kpi-label">Ordini totali</div>
+                <div class="kpi-val">{{ 20 }}</div>
+                <div class="kpi-label">Utenti online</div>
               </div>
             </div>
             <div class="kpi">
               <div class="kpi-icon products"></div>
               <div>
-                <div class="kpi-val">{{ kpi.products.toLocaleString() }}</div>
-                <div class="kpi-label">Prodotti disponibili</div>
+                <div class="kpi-label">Flows system</div>
               </div>
             </div>
           </div>
@@ -211,9 +210,26 @@ const team = ref([
 }
 .kpi-icon.users{ background:#eef2ff; }
 .kpi-icon.orders{ background:#ecfeff; }
-.kpi-icon.products{ background:#f0fdf4; }
 .kpi-val{ font-weight:800; font-size:1.25rem; color:#0f172a; }
 .kpi-label{ color:#64748b; }
+
+.kpi-icon.products {
+  background:#f0fdf4;
+  position: relative;     
+}
+
+
+.kpi-icon.products::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 18px;      
+  color: #16a34a;        
+  pointer-events: none;   
+}
 
 /* Table card */
 .card{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
