@@ -2,22 +2,26 @@
   "name": "flows-backoffice",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "cross-env CHOKIDAR_USEPOLLING=1 VITE_FS_POLLING=1 vite",
+    "dev": "concurrently -n API,WEB -c magenta,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "nodemon --watch api --ext js,json api/server.js",
+    "dev:web": "cross-env CHOKIDAR_USEPOLLING=1 VITE_FS_POLLING=1 vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "express": "^5.1.0",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
+    "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
+    "nodemon": "^3.1.10",
     "vite": "^7.0.6",
     "vite-plugin-vue-devtools": "^8.0.0"
   }

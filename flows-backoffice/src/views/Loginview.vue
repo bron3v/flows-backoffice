@@ -8,30 +8,36 @@
       <div class="login-card">
         <h1 class="title">Login</h1>
 
-        <form @submit.prevent="goHome">
+        <form @submit.prevent="login">
           <div class="form-group">
             <input
-              v-model.trim="form.username"
+              v-model.trim="email"
               type="email"
               placeholder="E-mail"
               required
               class="input"
+              autocomplete="username"
             />
           </div>
 
           <div class="form-group">
             <input
-              v-model="form.password"
+              v-model="password"
               type="password"
               placeholder="Password"
               required
               class="input"
+              autocomplete="current-password"
             />
           </div>
 
           <div>
-            <button class="btn">Login</button>
+            <button class="btn" :disabled="loading">
+              {{ loading ? 'Accesso…' : 'Login' }}
+            </button>
           </div>
+
+          <p v-if="error" style="margin-top:10px;color:#b00020">{{ error }}</p>
         </form>
       </div>
     </section>
@@ -39,17 +45,51 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-const form = reactive({ username: '', password: '' })
+const email = ref('')
+const password = ref('')
+const loading = ref(false)
+const error = ref('')
 const router = useRouter()
-function goHome () {
-  sessionStorage.setItem('flows_logged', '1'); // segna “loggato” per la sessione corrente
-  router.push('/');                            // vai alla home (root)
-}
 
+async function login () {
+  error.value = ''
+  loading.value = true
+  try {
+    const res = await fetch('/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: email.value, password: password.value })
+    })
+
+    // Leggi il body UNA SOLA VOLTA
+    const ct = res.headers.get('content-type') || ''
+    let payload
+    if (ct.includes('application/json')) {
+      payload = await res.json()
+    } else {
+      const txt = await res.text()
+      payload = { ok: res.ok, message: txt }
+    }
+
+    if (!res.ok || !payload?.ok) {
+      throw new Error(payload?.message || 'invalid_credentials')
+    }
+    
+    sessionStorage.setItem('flows_logged', '1')
+    // Successo: vai alla dashboard (o dove preferisci)
+    await router.push('/home')
+  } catch (e) {
+    error.value = e?.message || 'Errore di connessione'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
+
 
 <style scoped>
 /* Sfondo esterno */
@@ -62,7 +102,6 @@ function goHome () {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-
 .flows-card {
   width: min(850px, 96vw);
   min-height: 600px;
@@ -73,16 +112,11 @@ function goHome () {
   padding: 40px 28px 28px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  justify-items: center;     /* centra i figli orizzontalmente */
-  align-content: start;     
+  justify-items: center;
+  align-content: start;
 }
 
-
-.brand {
-  width: 100%;
-  text-align: center;        
-  margin: 6px 0 24px;
-}
+.brand { width: 100%; text-align: center; margin: 6px 0 24px; }
 #brand-name {
   margin: 0;
   font-size: clamp(28px, 6vw, 64px);
@@ -91,25 +125,18 @@ function goHome () {
   color: #ececef;
 }
 
-
 .login-card {
   width: min(380px, 90vw);
-  height:min(380px, 90vw) ;   
+  height: min(380px, 90vw);
   background: #ececef;
   border-radius: 16px;
   box-shadow: 0 10px 24px rgba(0,0,0,.16);
-  padding: 14px 16px 18px;   
-  text-align: center;        /* centra tutti i testi interni */
+  padding: 14px 16px 18px;
+  text-align: center;
 }
 
-.title {
-  margin: 6px 0 12px;
-  font-size: 24px;
-  font-weight: 700;
-  color: #1cb5a9;
-}
+.title { margin: 6px 0 12px; font-size: 24px; font-weight: 700; color: #1cb5a9; }
 
-/* Campi input */
 .form-group { margin-bottom: 10px; }
 
 .input {
@@ -125,10 +152,7 @@ function goHome () {
   transition: border-color .15s, box-shadow .15s;
 }
 .input::placeholder { color: #8fa3a9; }
-.input:focus {
-  border-color: #15978f;
-  box-shadow: 0 0 0 3px rgba(28,181,169,.18);
-}
+.input:focus { border-color: #15978f; box-shadow: 0 0 0 3px rgba(28,181,169,.18); }
 
 .btn {
   width: 100%;
@@ -145,7 +169,6 @@ function goHome () {
 .btn:hover { filter: brightness(0.96); }
 .btn:active { transform: translateY(1px); }
 
-/* Responsive */
 @media (max-width: 720px) {
   #brand-name { font-size: clamp(28px, 8vw, 48px); }
 }
