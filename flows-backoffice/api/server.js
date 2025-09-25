@@ -2,28 +2,33 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const { Pool } = require('pg');
-// const cors = require('cors'); // scommenta solo se NON usi il proxy di Vite
 
 const app = express();
 
 const pool = new Pool({
-  host: '172.19.16.1',        // ok se il server Postgres è qui; altrimenti 'localhost'
-  user: 'postgres',
-  password: 'FPW',
-  database: 'flows-backoffice',
-  port: 5432
+  host: '172.19.16.1', // Host del server Postgres
+  user: 'postgres',           
+  password: 'FPW',            
+  database: 'flows-backoffice', 
+  port: 5432 // Porta standard Postgres
 });
 
-// imposta il search_path così lo schema "auth" è visto di default
+//Impostazione del search_path, schema "auth" è visto di default
 pool.on('connect', (client) => {
   client.query('SET search_path TO auth, public');
 });
 
 // Body parsers
+// Abilitazione lettura di body "application/x-www-form-urlencoded" e "application/json" dalle richieste HTTP.
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // Sessione (dev)
+// Abilita sessioni lato server
+// - secret: chiave per firmare il cookie di sessione
+// - resave/saveUninitialized: evita scritture inutili.
+// - cookie.secure: TODO: in produzione impostare a true per HTTPS
+// - sameSite: 'lax' riduce rischi CSRF mantenendo compatibilità con navigazioni "normali".
 app.use(session({
   secret: 'secret-key',
   resave: false,
@@ -31,11 +36,12 @@ app.use(session({
   cookie: { secure: false, sameSite: 'lax' }
 }));
 
-// SOLO se NON usi il proxy di Vite (e fai fetch verso :3000):
-// app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 
-// --- ENDPOINTS ---
-// /auth
+// Endpoint di autenticazione:
+// - Validazione presenza di email e password nel body.
+// - Esecuzione di query su Postgres per evitare problemi di SQL injection.
+// - Se trova l'utente, crea la sessione e restituisce { ok: true, user }.
+// - Altrimenti, restituisce 401 con "invalid_credentials".
 app.post('/auth', async (req, res) => {
   try {
     console.log('[/auth] body:', req.body);
@@ -44,7 +50,7 @@ app.post('/auth', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'missing_fields' });
     }
 
-    // usa lo schema corretto; con il search_path puoi anche lasciare "users"
+    //Confronto password in chiaro. TODO: usare hash bcrypt.
     const sql = 'SELECT id, email FROM users WHERE email = $1 AND password = $2 LIMIT 1';
     const { rows } = await pool.query(sql, [email, password]);
 
@@ -53,6 +59,7 @@ app.post('/auth', async (req, res) => {
       return res.status(401).json({ ok: false, message: 'invalid_credentials' });
     }
 
+    // Salvataggio dello stato di login nella sessione (server-side) e info utente non sensibili.
     req.session.loggedIn = true;
     req.session.user = { id: rows[0].id, email: rows[0].email };
     return res.json({ ok: true, user: req.session.user });
@@ -62,16 +69,20 @@ app.post('/auth', async (req, res) => {
   }
 });
 
-// /me
+// Endpoint di verifica sessione:
+// - Se la sessione esiste e l'utente è loggato, ritorna { ok: true, user }.
+// - Altrimenti 401 "not_logged_in".
 app.get('/me', (req, res) => {
   if (req.session?.loggedIn) return res.json({ ok: true, user: req.session.user });
   return res.status(401).json({ ok: false, message: 'not_logged_in' });
 });
 
-// test
+
+// Health-check per verificare che il server risponde.
 app.get('/', (_req, res) => {
   res.send('API up');
 });
 
 const PORT = process.env.PORT || 3000;
+// Avvio del server HTTP su PORT (default 3000). Stampa dell'URL locale d'ascolto.
 app.listen(PORT, () => console.log(`API http://localhost:${PORT}`));

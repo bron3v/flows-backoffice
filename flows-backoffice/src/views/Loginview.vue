@@ -50,22 +50,23 @@ import { useRouter } from 'vue-router'
 
 const email = ref('')
 const password = ref('')
-const loading = ref(false)
+const loading = ref(false) //Disabilita form durante la richiesta
 const error = ref('')
-const router = useRouter()
+const router = useRouter() //Reindirizza utente a Homeview
 
 async function login () {
-  error.value = ''
-  loading.value = true
+  error.value = '' //Ripristina eventuali messaggi di errore precedenti
+  loading.value = true //Stato caricamento UI
   try {
-    const res = await fetch('/auth', {
+    //Tramite azione POST invio email e password in formato json
+    const res = await fetch('/auth', { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ email: email.value, password: password.value })
     })
 
-    // Leggi il body UNA SOLA VOLTA
+    //Lettura header content-type e se è in formato json lo legge normalmente, altrimenti legge il testo e crea un payload
     const ct = res.headers.get('content-type') || ''
     let payload
     if (ct.includes('application/json')) {
@@ -75,17 +76,19 @@ async function login () {
       payload = { ok: res.ok, message: txt }
     }
 
+    //Valutazione eventuali errori legati a email e/o password errato/i o ad altri tipi di errore
     if (!res.ok || !payload?.ok) {
       throw new Error(payload?.message || 'invalid_credentials')
     }
     
-    sessionStorage.setItem('flows_logged', '1')
-    // Successo: vai alla dashboard (o dove preferisci)
-    await router.push('/home')
+
+    sessionStorage.setItem('flows_logged', '1') //Salvataggio token/flag di sessione, valido fino all'apertura del Tab
+
+    await router.push('/home') //Reindirizzamento alla home
   } catch (e) {
-    error.value = e?.message || 'Errore di connessione'
+    error.value = e?.message || 'Errore di connessione' //Gestione eventuali errori di rete
   } finally {
-    loading.value = false
+    loading.value = false //Resetta lo stato di caricamento
   }
 }
 </script>
