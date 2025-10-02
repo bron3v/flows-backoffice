@@ -8,7 +8,7 @@
       <div class="login-card">
         <h1 class="title">Login</h1>
 
-        <form @submit.prevent="login">
+        <form @submit.prevent="doLogin">
           <div class="form-group">
             <input
               v-model.trim="email"
@@ -46,53 +46,49 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import { api } from '@/utils/api'
+
+// chiavi allineate con il router (index.js)
+const AUTH_CACHE_KEY = 'flows_logged'
+const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
 
 const email = ref('')
 const password = ref('')
-const loading = ref(false) //Disabilita form durante la richiesta
+const loading = ref(false)
 const error = ref('')
-const router = useRouter() //Reindirizza utente a Homeview
 
-async function login () {
-  error.value = '' //Ripristina eventuali messaggi di errore precedenti
-  loading.value = true //Stato caricamento UI
+const router = useRouter()
+const route = useRoute()
+
+async function doLogin () {
+  error.value = ''
+  loading.value = true
   try {
-    //Tramite azione POST invio email e password in formato json
-    const res = await fetch('/auth', { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email: email.value, password: password.value })
-    })
+    // chiama /auth tramite wrapper
+    const resp = await api.login(email.value, password.value) // { ok:true, user:{...} }
 
-    //Lettura header content-type e se è in formato json lo legge normalmente, altrimenti legge il testo e crea un payload
-    const ct = res.headers.get('content-type') || ''
-    let payload
-    if (ct.includes('application/json')) {
-      payload = await res.json()
-    } else {
-      const txt = await res.text()
-      payload = { ok: res.ok, message: txt }
-    }
+    // mini-cache per il guard del router
+    sessionStorage.setItem(AUTH_CACHE_KEY, resp?.ok ? '1' : '0')
+    sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
 
-    //Valutazione eventuali errori legati a email e/o password errato/i o ad altri tipi di errore
-    if (!res.ok || !payload?.ok) {
-      throw new Error(payload?.message || 'invalid_credentials')
-    }
-    
-
-    sessionStorage.setItem('flows_logged', '1') //Salvataggio token/flag di sessione, valido fino all'apertura del Tab
-
-    await router.push('/home') //Reindirizzamento alla home
+    // redirect: se presente ?redirect= torna lì, altrimenti home
+    const back = typeof route.query.redirect === 'string' && route.query.redirect
+      ? route.query.redirect
+      : '/'
+    await router.push(back)
   } catch (e) {
-    error.value = e?.message || 'Errore di connessione' //Gestione eventuali errori di rete
+    // mapping errori comuni
+    if (e.message === 'HTTP 401' || e.message === 'invalid_credentials') {
+      error.value = 'Email o password errati'
+    } else {
+      error.value = 'Errore di connessione'
+    }
   } finally {
-    loading.value = false //Resetta lo stato di caricamento
+    loading.value = false
   }
 }
 </script>
-
 
 <style scoped>
 /* Sfondo esterno */
@@ -139,7 +135,6 @@ async function login () {
 }
 
 .title { margin: 6px 0 12px; font-size: 24px; font-weight: 700; color: #1cb5a9; }
-
 .form-group { margin-bottom: 10px; }
 
 .input {

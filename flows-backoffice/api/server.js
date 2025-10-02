@@ -83,6 +83,26 @@ app.get('/', (_req, res) => {
   res.send('API up');
 });
 
+// server.js
+function requireLogin(req,res,next){ if(req.session?.loggedIn) return next(); res.status(401).json({ok:false,message:'not_logged_in'}); }
+const adminApi = require('express').Router();
+adminApi.get('/stats', (req,res)=> res.json({ ok:true, user:req.session.user, stats:{ uptime: process.uptime() }}));
+app.use('/admin/api', requireLogin, adminApi);
+
+
+// Esempi di endpoint interni
+adminApi.get('/stats', (req, res) => {
+  res.json({ ok: true, user: req.session.user, stats: { uptime: process.uptime() } });
+});
+
+adminApi.get('/users/me', (req, res) => {
+  res.json({ ok: true, user: req.session.user });
+});
+
+// Monta il router con la guardia
+app.use('/admin/api', requireLogin, adminApi);
+
+
 const PORT = process.env.PORT || 3000;
 // Avvio del server HTTP su PORT (default 3000). Stampa dell'URL locale d'ascolto.
 app.listen(PORT, () => console.log(`API http://localhost:${PORT}`));

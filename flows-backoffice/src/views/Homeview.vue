@@ -13,7 +13,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
             <input placeholder="Search..." />
           </div>
-          <div class="avatar">A</div>
+          <div class="avatar">{{ avatarInitial }}</div>
         </div>
       </header>
 
@@ -25,7 +25,7 @@
 
           <ul class="pending-list" v-if="pending.length">
             <li v-for="u in pending" :key="u.id" class="pending-item">
-              <img :src="u.avatar" alt="" />
+              <img :src="u.avatar || defaultAvatar" alt="" />
               <div class="meta">
                 <strong>{{ u.name }}</strong>
                 <small>{{ u.email }}</small>
@@ -49,26 +49,26 @@
             <div class="kpi">
               <div class="kpi-icon users"></div>
               <div>
-                <div class="kpi-val">{{ 50 }}</div>
+                <div class="kpi-val">{{ kpi.usersTotal }}</div>
                 <div class="kpi-label">Utenti totali</div>
               </div>
             </div>
             <div class="kpi">
               <div class="kpi-icon orders"></div>
               <div>
-                <div class="kpi-val">{{ 20 }}</div>
+                <div class="kpi-val">{{ kpi.usersOnline }}</div>
                 <div class="kpi-label">Utenti online</div>
               </div>
             </div>
             <div class="kpi">
               <div class="kpi-icon products"></div>
               <div>
-                <div class="kpi-label">Flows system</div>
+                <div class="kpi-label">{{ systemName }}</div>
               </div>
             </div>
           </div>
 
-          <!-- Tabella utenti (esempio) -->
+          <!-- Tabella utenti -->
           <div class="card">
             <div class="card-head">
               <h3>Team</h3>
@@ -88,7 +88,7 @@
               <tbody>
                 <tr v-for="m in team" :key="m.id">
                   <td class="person">
-                    <img :src="m.avatar" alt="" />
+                    <img :src="m.avatar || defaultAvatar" alt="" />
                     <div>
                       <div class="name">{{ m.name }}</div>
                       <div class="small muted">{{ m.email }}</div>
@@ -119,31 +119,151 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
+import { api } from '@/utils/api'
 
-const pending = ref([
-  { id: 1, name: 'John Doe', email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11' },
-  { id: 2, name: 'Jane Smith', email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32' },
-  { id: 3, name: 'Alex Brown', email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5' },
-])
+// stato base
+const router = useRouter()
+const route = useRoute()
+const defaultAvatar = 'https://i.pravatar.cc/40?img=1'
 
-// persistenza semplice in localStorage
-onMounted(() => {
-  const saved = localStorage.getItem('flows_pending')
-  if (saved) pending.value = JSON.parse(saved)
+const avatarInitial = ref('A')
+const systemName = ref('Flows system')
+
+const kpi = ref({
+  usersTotal: 0,
+  usersOnline: 0,
 })
-watch(pending, v => localStorage.setItem('flows_pending', JSON.stringify(v)), { deep: true })
 
-function approve(u){ pending.value = pending.value.filter(x => x.id !== u.id) }
-function reject(u){ pending.value = pending.value.filter(x => x.id !== u.id) }
+const pending = ref([])
+const team = ref([])
 
-const kpi = ref({ newUsers: 8282, orders: 200521, products: 215542 })
-const team = ref([
-  { id: 10, name:'John Doe', email:'john@sample.com', title:'Software Engineer', track:'Web dev', active:true, role:'Owner', avatar:'https://i.pravatar.cc/40?img=15' },
-  { id: 11, name:'Sara Lee', email:'sara@sample.com', title:'Designer', track:'UI/UX', active:true, role:'Editor', avatar:'https://i.pravatar.cc/40?img=48' },
-  { id: 12, name:'David Kim', email:'david@sample.com', title:'DevOps', track:'Infra', active:true, role:'Admin', avatar:'https://i.pravatar.cc/40?img=22' },
-  { id: 13, name:'Marta G.', email:'marta@sample.com', title:'QA Engineer', track:'Testing', active:true, role:'Member', avatar:'https://i.pravatar.cc/40?img=3' },
-])
+// persistenza semplice in localStorage come fallback
+onMounted(() => {
+  // carica tutto
+  bootstrap()
+})
+
+// salva pending localmente (solo come fallback UX)
+watch(pending, v => {
+  localStorage.setItem('flows_pending', JSON.stringify(v))
+}, { deep: true })
+
+async function bootstrap () {
+  // 1) verifica sessione/me per avatar + gestione redirect se non loggato
+  try {
+    const me = await api.me().catch(() => api.meAdmin?.())
+    if (!me?.user && !me?.ok) throw new Error('NOT_LOGGED_IN')
+
+    const seed = (me.user?.email || me.user?.name || 'A').trim()
+    avatarInitial.value = seed ? seed[0].toUpperCase() : 'A'
+  } catch (e) {
+    // non loggato → manda al login con redirect back
+    const redirect = route.fullPath || '/'
+    router.push({ path: '/login', query: { redirect } })
+    return
+  }
+
+  // 2) stats KPI
+  await loadStats()
+
+  // 3) pending approvazioni
+  await loadPending()
+
+  // 4) team (se esiste endpoint), altrimenti mock
+  await loadTeam()
+}
+
+async function loadStats () {
+  try {
+    const s = await api.stats() // { ok:true, stats:{...} } nel nostro esempio
+    // accetta diverse forme per robustezza
+    const st = s?.stats || s || {}
+    kpi.value.usersTotal = Number(st.usersTotal ?? st.totalUsers ?? 50)
+    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? 20)
+    if (st.systemName) systemName.value = String(st.systemName)
+  } catch {
+    // fallback statico
+    kpi.value = { usersTotal: 50, usersOnline: 20 }
+    systemName.value = 'Flows system'
+  }
+}
+
+async function loadPending () {
+  try {
+    // se hai un endpoint reale, es: GET /admin/api/pending
+    const r = await api.get('/admin/api/pending')
+    const items = r?.items || r || []
+    if (Array.isArray(items) && items.length) {
+      pending.value = items
+      return
+    }
+    // se vuoto, prova fallback locale
+    const saved = localStorage.getItem('flows_pending')
+    if (saved) pending.value = JSON.parse(saved)
+    else pending.value = samplePending()
+  } catch {
+    // fallback locale
+    const saved = localStorage.getItem('flows_pending')
+    if (saved) pending.value = JSON.parse(saved)
+    else pending.value = samplePending()
+  }
+}
+
+async function loadTeam () {
+  try {
+    // se esiste un endpoint, es: GET /admin/api/team
+    const r = await api.get?.('/admin/api/team')
+    const items = r?.items || r
+    if (Array.isArray(items) && items.length) {
+      team.value = items
+      return
+    }
+    team.value = sampleTeam()
+  } catch {
+    team.value = sampleTeam()
+  }
+}
+
+function samplePending () {
+  return [
+    { id: 1, name: 'John Doe', email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11' },
+    { id: 2, name: 'Jane Smith', email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32' },
+    { id: 3, name: 'Alex Brown', email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5' },
+  ]
+}
+
+function sampleTeam () {
+  return [
+    { id: 10, name:'John Doe',  email:'john@sample.com',  title:'Software Engineer', track:'Web dev',  active:true,  role:'Owner',  avatar:'https://i.pravatar.cc/40?img=15' },
+    { id: 11, name:'Sara Lee',  email:'sara@sample.com',  title:'Designer',          track:'UI/UX',    active:true,  role:'Editor', avatar:'https://i.pravatar.cc/40?img=48' },
+    { id: 12, name:'David Kim', email:'david@sample.com', title:'DevOps',            track:'Infra',    active:true,  role:'Admin',  avatar:'https://i.pravatar.cc/40?img=22' },
+    { id: 13, name:'Marta G.',  email:'marta@sample.com', title:'QA Engineer',       track:'Testing',  active:true,  role:'Member', avatar:'https://i.pravatar.cc/40?img=3' },
+  ]
+}
+
+// azioni approvazioni (optimistic UI + chiamata API se disponibile)
+async function approve (u) {
+  const prev = [...pending.value]
+  pending.value = pending.value.filter(x => x.id !== u.id)
+  try {
+    await api.post?.(`/admin/api/approvals/${u.id}/approve`, {})
+  } catch {
+    // ripristina se fallisce server
+    pending.value = prev
+  }
+}
+
+async function reject (u) {
+  const prev = [...pending.value]
+  pending.value = pending.value.filter(x => x.id !== u.id)
+  try {
+    await api.post?.(`/admin/api/approvals/${u.id}/reject`, {})
+  } catch {
+    pending.value = prev
+  }
+}
 </script>
 
 <style scoped>
@@ -215,10 +335,8 @@ const team = ref([
 
 .kpi-icon.products {
   background:#f0fdf4;
-  position: relative;     
+  position: relative;
 }
-
-
 .kpi-icon.products::after {
   content: '✓';
   position: absolute;
@@ -226,9 +344,9 @@ const team = ref([
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: 18px;      
-  color: #16a34a;        
-  pointer-events: none;   
+  font-size: 18px;
+  color: #16a34a;
+  pointer-events: none;
 }
 
 /* Table card */
