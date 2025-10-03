@@ -331,28 +331,11 @@ async function reject(u) {
 /* Content grid */
 .content {
   display: grid;
-  grid-template-columns: 320px 1fr;
-  /* sinistra: approvazioni | destra: dashboard */
+  grid-template-columns: 1fr;
   gap: 18px;
   padding: 18px;
 }
 
-/* Approvals column */
-.approvals {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 14px;
-  position: sticky;
-  top: 82px;
-  height: fit-content;
-}
-
-.approvals h2 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-  color: #0f172a;
-}
 
 .pending-list {
   list-style: none;
