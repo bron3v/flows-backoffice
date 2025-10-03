@@ -146,18 +146,63 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 #request-button{ position: fixed; bottom: 20px; padding: 12px 20px; background:#6ee7b7; color: white; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s ease; }
 #request-button:hover { box-shadow: 0 6px 14px rgba(0,0,0,0.25); }
 /* Modal */
-.overlay{ position: fixed; inset: 0; background: rgba(2,6,23,.55); display: grid; place-items: center; z-index: 50; }
-.modal{ width: min(420px, 92vw); background: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.25); padding: 18px 16px 14px; }
-.modal h3{ margin: 0 0 12px; font-size: 1.05rem; font-weight: 800; color: #0f172a; }
-.field{ margin-bottom: 10px; }
-.field label{ display:block; font-size:.85rem; color:#334155; margin-bottom:4px; }
-.field input{ width:100%; height:40px; border:1px solid #cbd5e1; border-radius:10px; outline:none; padding:0 10px; font-size:.95rem; }
-.field input:focus{ border-color:#6ee7b7; box-shadow: 0 0 0 3px rgba(110,231,183,.2); }
-.btns{ display:flex; justify-content:flex-end; gap:8px; margin-top: 10px; }
-.btn{ height:40px; padding:0 14px; border-radius:10px; border:none; cursor:pointer; font-weight:700; }
+.overlay{
+  position: fixed; inset: 0;
+  background: rgba(2,6,23,.55);
+  display: grid; place-items: center; z-index: 9999;
+  padding: 12px;
+}
+.modal{
+  width: min(480px, 92vw);
+  background: #f5f7fb;
+  border-radius: 20px;
+  box-shadow: 0 22px 60px rgba(15,23,42,.28);
+  padding: 22px 22px 18px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden; /* evita che il focus-ring “sbordi” */
+}
+.modal h3{
+  margin: 2px 0 14px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-align: center;
+  color: #0f172a;
+  letter-spacing: .3px;
+}
+
+/* campi */
+.field{ margin-bottom: 12px; }
+.field label{
+  display:block; font-size:.9rem; color:#334155; margin-bottom:6px; font-weight:600;
+}
+.field input{
+  width:100%;
+  height:46px;
+  border:1.5px solid #c8d3e1;
+  border-radius:12px;
+  outline:none;
+  padding:0 12px;
+  font-size:1rem;
+  background:#e8eef6;
+  color:#0f172a;
+  box-sizing:border-box; 
+}
+.field input:focus{
+  border-color:#10b981;
+  box-shadow: 0 0 0 2px rgba(16,185,129,.25) inset;
+}
+/* FIX autofill Chrome/Edge */
+.field input:-webkit-autofill{
+  -webkit-box-shadow: 0 0 0 1000px #e8eef6 inset !important;
+  -webkit-text-fill-color:#0f172a !important;
+  caret-color:#0f172a;
+}
+
+/* bottoni */
+.btns{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+.btn{ height:44px; padding:0 18px; border-radius:12px; border:none; cursor:pointer; font-weight:800; }
 .btn.secondary{ background:#e2e8f0; color:#0f172a; }
-.btn.primary{ background:#10b981; color:#fff; }
+.btn.primary{ background:#10b981; color:#fff; box-shadow:0 8px 24px rgba(16,185,129,.22); }
+.btn.primary:hover{ filter:brightness(1.03); }
 .btn:disabled{ opacity:.7; cursor:not-allowed; }
-.err{ color:#b00020; margin:6px 0; }
-.ok{ color:#059669; margin:6px 0; }
 </style>
