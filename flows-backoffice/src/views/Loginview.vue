@@ -49,7 +49,6 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api } from '@/utils/api'
 
-// chiavi allineate con il router (index.js)
 const AUTH_CACHE_KEY = 'flows_logged'
 const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
 
@@ -61,34 +60,49 @@ const error = ref('')
 const router = useRouter()
 const route = useRoute()
 
+function isEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '') }
+
 async function doLogin () {
   error.value = ''
+  // validazione minima
+  if (!isEmail(email.value) || !password.value) {
+    error.value = 'Inserisci email e password valide'
+    return
+  }
+
   loading.value = true
   try {
-    // chiama /auth tramite wrapper
-    const resp = await api.login(email.value, password.value) // { ok:true, user:{...} }
+    const { ok, status, data } = await api.login(email.value, password.value)
 
-    // mini-cache per il guard del router
-    sessionStorage.setItem(AUTH_CACHE_KEY, resp?.ok ? '1' : '0')
+    if (!ok || !data?.ok || !data?.user) {
+      // mapping errori comuni
+      if (status === 401 || data?.message === 'invalid_credentials') {
+        error.value = 'Email o password errati'
+      } else if (status === 400) {
+        error.value = 'Compila tutti i campi'
+      } else {
+        error.value = 'Errore del server'
+      }
+      // marca login fallito per il guard
+      sessionStorage.setItem(AUTH_CACHE_KEY, '0')
+      sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
+      return
+    }
+
+    // successo: cache e redirect
+    sessionStorage.setItem(AUTH_CACHE_KEY, '1')
     sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
 
-    // redirect: se presente ?redirect= torna lì, altrimenti home
-    const back = typeof route.query.redirect === 'string' && route.query.redirect
-      ? route.query.redirect
-      : '/'
+    const back = (typeof route.query.redirect === 'string' && route.query.redirect) ? route.query.redirect : '/'
     await router.push(back)
   } catch (e) {
-    // mapping errori comuni
-    if (e.message === 'HTTP 401' || e.message === 'invalid_credentials') {
-      error.value = 'Email o password errati'
-    } else {
-      error.value = 'Errore di connessione'
-    }
+    error.value = 'Errore di connessione'
   } finally {
     loading.value = false
   }
 }
 </script>
+
 
 <style scoped>
 /* Sfondo esterno */

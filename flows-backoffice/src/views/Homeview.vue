@@ -247,8 +247,30 @@ function sampleTeam() {
 
 // --- approvazioni SOLO FE: aggiornano la lista + localStorage ---
 async function approve(u) {
-  pending.value = pending.value.filter(x => x.id !== u.id)
+  try {
+    const res = await fetch('/admin/api/approvals/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name: u.name, email: u.email })
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data?.ok) {
+      if (data?.message === 'user_exists') {
+        alert('Utente già presente. Rimuovo la richiesta.')
+        pending.value = pending.value.filter(x => x.id !== u.id)
+        return
+      }
+      throw new Error(data?.message || 'Errore approvazione')
+    }
+    pending.value = pending.value.filter(x => x.id !== u.id)
+    alert(`Utente creato e email inviata a ${u.email}`)
+  } catch (e) {
+    console.error(e)
+    alert('Impossibile approvare la richiesta. Riprova.')
+  }
 }
+
 async function reject(u) {
   pending.value = pending.value.filter(x => x.id !== u.id)
 }

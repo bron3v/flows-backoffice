@@ -151,6 +151,84 @@ app.post('/api/mail/send', async (req, res) => {
   }
 })
 
+//Generazione credenziali accettazione utente
+// Password random (12–16 char, senza caratteri ambigui)
+function genPassword(len = 14) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+  let out = ''
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)]
+  return out
+}
+
+/**
+ * POST /admin/api/approvals/approve
+ * Body: { name, email }
+ * - Crea utente in auth.users (password in chiaro, come il tuo /auth)
+ * - Invia email con le credenziali
+ */
+adminApi.post('/approvals/approve', async (req, res) => {
+  try {
+    const { name, email } = req.body || {}
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!email || !emailRe.test(email)) {
+      return res.status(400).json({ ok: false, message: 'invalid_email' })
+    }
+
+    const plainPwd = genPassword()
+
+    // NB: hai già search_path 'auth, public', quindi "users" risolve a "auth.users".
+    // Se preferisci, puoi qualificare esplicitamente: INSERT INTO auth.users ...
+    const sql = `
+      INSERT INTO users (email, password)
+      VALUES ($1, $2)
+      ON CONFLICT (email) DO NOTHING
+      RETURNING id, email
+    `
+    const { rows } = await pool.query(sql, [email.toLowerCase(), plainPwd])
+    if (rows.length === 0) {
+      return res.status(409).json({ ok: false, message: 'user_exists' })
+    }
+
+    // Email con credenziali
+    const subject = 'Il tuo accesso a Flows Backoffice'
+    const loginUrl = 'http://localhost:5173/login' // cambia in prod
+    const safeName = name ? `<b>${name}</b>` : 'nuovo utente'
+    const html = `
+      <p>Ciao ${safeName},</p>
+      <p>il tuo account è stato approvato.</p>
+      <p><b>Credenziali</b><br/>
+      Email: <code>${email}</code><br/>
+      Password: <code>${plainPwd}</code></p>
+      <p>Accedi qui: <a href="${loginUrl}">${loginUrl}</a></p>
+      <p>Per sicurezza, modifica la password dopo il primo accesso.</p>
+    `
+    const text =
+`Ciao ${name || 'utente'},
+il tuo account è stato approvato.
+
+Credenziali:
+Email: ${email}
+Password: ${plainPwd}
+
+Accedi: ${loginUrl}
+(Consiglio: modifica la password dopo il primo accesso)`
+
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || 'no-reply@localhost',
+      to: email,
+      subject,
+      text,
+      html
+    })
+
+    return res.json({ ok: true, user: rows[0] })
+  } catch (err) {
+    console.error('[/admin/api/approvals/approve] error:', err)
+    return res.status(500).json({ ok: false, message: 'server_error' })
+  }
+})
+
+
 // ---------- Start ----------
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => console.log(`API http://localhost:${PORT}`))

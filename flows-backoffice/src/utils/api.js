@@ -22,15 +22,28 @@ async function request(path, { method = 'GET', body, headers } = {}) {
 }
 
 // --- wrapper comodi ---
+// src/utils/api.js
 export const api = {
-  get:  (p) => request(p),
-  post: (p, body) => request(p, { method: 'POST', body }),
+  async login(email, password) {
+    const res = await fetch('/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',             // serve per la sessione
+      body: JSON.stringify({ email, password })
+    })
+    const data = await res.json().catch(() => ({}))
+    return { ok: res.ok, status: res.status, data }
+  },
 
-  // --- AUTH ---
-  login: (email, password) => request('/auth', { method: 'POST', body: { email, password } }),
-  me:    () => request('/me'),
+  async me() {
+    const res = await fetch('/me', { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+    return { ok: res.ok, status: res.status, ...data }
+  },
 
-  // --- ADMIN API protette ---
-  stats: () => request('/admin/api/stats'),
-  meAdmin: () => request('/admin/api/users/me'),
-};
+  async stats() {
+    const res = await fetch('/admin/api/stats', { credentials: 'include' })
+    return res.json()
+  }
+}
+
