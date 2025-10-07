@@ -115,32 +115,52 @@ app.post('/auth/login', async (req, res) => {
   res.json({ ok: true, user: req.session.user })
 })
 
+// auth guard minimale
 function requireLogin (req, res, next) {
   if (req.session?.loggedIn) return next()
-  res.status(401).json({ ok: false, message: 'not_logged_in' })
+  return res.status(401).json({ ok: false, message: 'not_logged_in' })
 }
 
+// DELETE utente per id – chiunque loggato, no self-delete
 app.delete('/admin/api/users/:id', requireLogin, async (req, res) => {
   const targetId = String(req.params.id)
-  const myId = String(req.session.user?.id || '')
+  const myId = String(req.session?.user?.id || '')
 
-  if (targetId === myId)
+  if (targetId === myId) {
     return res.status(403).json({ ok: false, message: 'cannot_delete_self' })
+  }
 
   try {
-    const { rows } = await pool.query(
-      'DELETE FROM auth.users WHERE id = $1 RETURNING id',
-      [targetId]
-    )
-    if (rows.length === 0) return res.status(404).json({ ok: false, message: 'user_not_found' })
-    res.json({ ok: true, deletedId: rows[0].id })
-  } catch (e) {
-    console.error(e)
-    res.status(500).json({ ok: false, message: 'delete_failed' })
+    const q = 'DELETE FROM auth.users WHERE id = $1 RETURNING id'
+    const { rows } = await pool.query(q, [targetId])
+    if (rows.length === 0) {
+      return res.status(404).json({ ok: false, message: 'user_not_found' })
+    }
+    return res.json({ ok: true, deletedId: rows[0].id })
+  } catch (err) {
+    console.error('DELETE /admin/api/users/:id error:', err)
+    return res.status(500).json({ ok: false, message: 'delete_failed' })
   }
 })
 
+// DELETE by email (fallback)
+app.delete('/admin/api/users/by-email/:email', requireLogin, async (req, res) => {
+  const targetEmail = String(req.params.email).toLowerCase()
+  const myEmail = String(req.session.user?.email || '').toLowerCase()
+  if (targetEmail === myEmail) {
+    return res.status(403).json({ ok: false, message: 'cannot_delete_self' })
+  }
 
+  try {
+    const q = 'DELETE FROM auth.users WHERE lower(email) = $1 RETURNING id'
+    const { rows } = await pool.query(q, [targetEmail])
+    if (rows.length === 0) return res.status(404).json({ ok: false, message: 'user_not_found' })
+    res.json({ ok: true, deletedId: rows[0].id })
+  } catch (err) {
+    console.error('DELETE by-email error:', err)
+    res.status(500).json({ ok: false, message: 'delete_failed' })
+  }
+})
 
 
 // ---------- Health-check ----------

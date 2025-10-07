@@ -9,37 +9,15 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
-    proxy: {
-      // API mail (e altre future API non-admin)
-      '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-      // login
-      '/auth': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-      // verifica sessione
-      '/me': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-      // tutte le API interne protette (copre /admin/api/*)
-      '/admin': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-      // (opzionale) logout
-      '/logout': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
-      },
-    }
+  proxy: {
+    '/api':  { target: 'http://localhost:3000', changeOrigin: true, secure: false },
+    '/auth': { target: 'http://localhost:3000', changeOrigin: true, secure: false },
+    '/me':   { target: 'http://localhost:3000', changeOrigin: true, secure: false },
+
+    // ✅ specifica
+    '/admin/api': { target: 'http://localhost:3000', changeOrigin: true, secure: false },
+
+    '/logout': { target: 'http://localhost:3000', changeOrigin: true, secure: false },
   }
+}
 })

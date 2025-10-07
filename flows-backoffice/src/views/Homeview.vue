@@ -246,7 +246,7 @@ async function loadTeam() {
     }
 
     team.value = data.items.map(u => ({
-      id: u.id,
+      id: u.id ?? u.user_id ?? u._id ?? null,   // <-- aggiunto
       name: u.email,
       email: u.email,
       title: u.online ? 'Online' : 'Offline',
@@ -255,6 +255,7 @@ async function loadTeam() {
       role: 'Member',
       avatar: undefined
     }))
+
 
     kpi.value.usersOnline = data.items.filter(x => x.online).length
     kpi.value.usersTotal  = data.items.length
@@ -320,41 +321,51 @@ async function removeUser(u) {
   const ok = confirm(`Eliminare definitivamente l'utente ${u.email}?`)
   if (!ok) return
 
-  // protezione lato FE (in più rispetto al v-if)
-  if (sessionUser?.value?.id && u.id === sessionUser.value.id) {
+  if (sessionUser?.value?.id && String(u.id) === String(sessionUser.value.id)) {
     alert('Non puoi eliminare il tuo stesso account.')
     return
   }
-  if (sessionUser?.value?.email && u.email === sessionUser.value.email) {
+  if (sessionUser?.value?.email && String(u.email).toLowerCase() === String(sessionUser.value.email).toLowerCase()) {
     alert('Non puoi eliminare il tuo stesso account.')
     return
   }
+
+  // Scegli identificatore: prima id, altrimenti email
+  const hasId = u.id != null && String(u.id).trim() !== ''
+  const url = hasId
+    ? `/admin/api/users/${encodeURIComponent(String(u.id))}`                   // DELETE by id
+    : `/admin/api/users/by-email/${encodeURIComponent(String(u.email))}`       // DELETE by email (fallback)
 
   try {
-    const res = await fetch(`/admin/api/users/${encodeURIComponent(u.id)}`, {
+    const res = await fetch(url, {
       method: 'DELETE',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include'
     })
-    const data = await res.json().catch(() => ({}))
 
-    if (!res.ok || !data?.ok) {
-      throw new Error(data?.message || `HTTP ${res.status}`)
+    // prova a leggere JSON, altrimenti testo
+    let payload = {}
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      payload = await res.json().catch(() => ({}))
+    } else {
+      payload = { message: await res.text().catch(() => '') }
     }
 
-    // rimuovi subito dalla tabella
-    team.value = team.value.filter(x => x.id !== u.id)
+    if (!res.ok || payload?.ok !== true) {
+      const msg = payload?.message || `HTTP ${res.status}`
+      throw new Error(msg)
+    }
 
-    // aggiorna KPI
+    // ok → rimuovi dalla tabella e aggiorna KPI
+    team.value = team.value.filter(x => x.id !== u.id && x.email !== u.email)
     kpi.value.usersTotal = Math.max(0, kpi.value.usersTotal - 1)
     if (u.active) kpi.value.usersOnline = Math.max(0, kpi.value.usersOnline - 1)
-
-    alert(`Utente ${u.email} eliminato.`)
   } catch (e) {
-    console.error('DELETE /admin/api/users/:id failed', e)
-    alert('Impossibile eliminare l’utente. Riprova.')
+    console.error('DELETE user failed:', e)
+    alert(`Impossibile eliminare l’utente: ${e.message}`)
   }
 }
+
 
 </script>
 
