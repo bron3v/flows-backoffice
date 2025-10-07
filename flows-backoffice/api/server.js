@@ -11,14 +11,14 @@ const app = express()
 
 // ---------- Postgres ----------
 const pool = new Pool({
-  host: '172.19.16.1',
-  user: 'postgres',
-  password: 'FPW',
-  database: 'flows-backoffice',
-  port: 5432
+  host: process.env.PGHOST || '172.19.16.1',
+  user: process.env.PGUSER || 'postgres',
+  password: process.env.PGPASSWORD || 'FPW',
+  database: process.env.PGDATABASE || 'flows-backoffice',
+  port: Number(process.env.PGPORT || 5432)
 })
 
-// search_path di default: schema "auth" poi "public"
+// (facoltativo) search_path, ma usiamo comunque schema esplicito nelle query
 pool.on('connect', (client) => {
   client.query('SET search_path TO auth, public')
 })
@@ -29,11 +29,29 @@ app.use(express.json())
 
 // ---------- Sessioni ----------
 app.use(session({
-  secret: 'secret-key',
+  secret: process.env.SESSION_SECRET || 'secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false, sameSite: 'lax' }
 }))
+
+// ---------- Heartbeat last_seen (max 1 update/min) ----------
+app.use(async (req, _res, next) => {
+  try {
+    if (req.session?.loggedIn && req.session?.user?.id) {
+      const now = Date.now()
+      const last = req.session._lastSeenAt || 0
+      if (now - last > 60_000) {
+        req.session._lastSeenAt = now
+        await pool.query(
+          'UPDATE auth.users SET last_seen = now() WHERE id = $1',
+          [req.session.user.id]
+        )
+      }
+    }
+  } catch (_) { /* no-op */ }
+  next()
+})
 
 // ---------- Auth ----------
 app.post('/auth', async (req, res) => {
@@ -43,8 +61,14 @@ app.post('/auth', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'missing_fields' })
     }
 
-    // TODO: usare password hash (bcrypt)
-    const sql = 'SELECT id, email FROM users WHERE email = $1 AND password = $2 LIMIT 1'
+    // TODO: passare ad hash (bcrypt/pgcrypto). Ora password in chiaro come da tua tabella.
+    const sql = `
+      SELECT id, email
+      FROM auth.users
+      WHERE lower(email) = lower($1)
+        AND password = $2
+      LIMIT 1
+    `
     const { rows } = await pool.query(sql, [email, password])
 
     if (rows.length !== 1) {
@@ -53,10 +77,13 @@ app.post('/auth', async (req, res) => {
 
     req.session.loggedIn = true
     req.session.user = { id: rows[0].id, email: rows[0].email }
-    return res.json({ ok: true, user: req.session.user })
+
+    await pool.query('UPDATE auth.users SET last_seen = now() WHERE id = $1', [rows[0].id])
+
+    res.json({ ok: true, user: req.session.user })
   } catch (err) {
     console.error('[/auth] error:', err)
-    return res.status(500).json({ ok: false, message: 'server_error' })
+    res.status(500).json({ ok: false, message: 'server_error' })
   }
 })
 
@@ -81,15 +108,141 @@ function requireLogin (req, res, next) {
 // ---------- Router admin protetto ----------
 const adminApi = express.Router()
 
-adminApi.get('/stats', (req, res) => {
-  res.json({ ok: true, user: req.session.user, stats: { uptime: process.uptime() } })
+// Stats reali
+adminApi.get('/stats', async (_req, res) => {
+  try {
+    const qTotal  = `SELECT COUNT(*)::int AS total FROM auth.users`
+    const qOnline = `
+      SELECT COUNT(*)::int AS online
+      FROM auth.users
+      WHERE now() - last_seen <= interval '2 minutes'
+    `
+    const [{ rows: t1 }, { rows: t2 }] = await Promise.all([
+      pool.query(qTotal),
+      pool.query(qOnline)
+    ])
+
+    res.json({
+      ok: true,
+      stats: {
+        usersTotal: t1[0].total,
+        usersOnline: t2[0].online,
+        systemName: 'Flows system',
+        uptime: process.uptime()
+      }
+    })
+  } catch (e) {
+    console.error('[/admin/api/stats] error:', e)
+    res.status(500).json({ ok: false, message: 'server_error' })
+  }
 })
 
 adminApi.get('/users/me', (req, res) => {
   res.json({ ok: true, user: req.session.user })
 })
 
-// Monta UNA sola volta
+// Lista utenti + flag online
+adminApi.get('/users', async (_req, res) => {
+  try {
+    const sql = `
+      SELECT
+        id,
+        email,
+        last_seen,
+        (now() - last_seen <= interval '2 minutes') AS online
+      FROM auth.users
+      ORDER BY online DESC, email ASC
+    `
+    const { rows } = await pool.query(sql)
+    res.json({ ok: true, items: rows })
+  } catch (e) {
+    console.error('[/admin/api/users] error:', e)
+    res.status(500).json({ ok: false, message: 'server_error' })
+  }
+})
+
+// Generazione password random (12–16 char, senza caratteri ambigui)
+function genPassword (len = 14) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
+  let out = ''
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)]
+  return out
+}
+
+// Approva: crea utente + invia credenziali
+adminApi.post('/approvals/approve', async (req, res) => {
+  try {
+    const { name, email } = req.body || {}
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!email || !emailRe.test(email)) {
+      return res.status(400).json({ ok: false, message: 'invalid_email' })
+    }
+
+    const plainPwd = genPassword()
+
+    const sql = `
+      INSERT INTO auth.users (email, password)
+      VALUES ($1, $2)
+      ON CONFLICT (email) DO NOTHING
+      RETURNING id, email
+    `
+    const { rows } = await pool.query(sql, [email.toLowerCase(), plainPwd])
+    if (rows.length === 0) {
+      return res.status(409).json({ ok: false, message: 'user_exists' })
+    }
+
+    const subject = 'Il tuo accesso a Flows Backoffice'
+    const loginUrl = 'http://localhost:5173/login' // cambia in prod
+    const safeName = name ? `<b>${name}</b>` : 'nuovo utente'
+    const html = `
+      <p>Ciao ${safeName},</p>
+      <p>il tuo account è stato approvato.</p>
+      <p><b>Credenziali</b><br/>
+      Email: <code>${email}</code><br/>
+      Password: <code>${plainPwd}</code></p>
+      <p>Accedi qui: <a href="${loginUrl}">${loginUrl}</a></p>
+      <p>Per sicurezza, modifica la password dopo il primo accesso.</p>
+    `
+    const text =
+`Ciao ${name || 'utente'},
+il tuo account è stato approvato.
+
+Credenziali:
+Email: ${email}
+Password: ${plainPwd}
+
+Accedi: ${loginUrl}
+(Consiglio: modifica la password dopo il primo accesso)`
+
+    await transporter.sendMail({
+      from: process.env.MAIL_FROM || 'no-reply@localhost',
+      to: email,
+      subject,
+      text,
+      html
+    })
+
+    res.json({ ok: true, user: rows[0] })
+  } catch (err) {
+    console.error('[/admin/api/approvals/approve] error:', err)
+    res.status(500).json({ ok: false, message: 'server_error' })
+  }
+})
+
+// --- Diagnostica (DEV): info DB + conteggi ---
+adminApi.get('/debug/db', async (_req, res) => {
+  try {
+    const info = await pool.query(`
+      SELECT current_database() AS db, current_schema() AS schema
+    `)
+    const cnt  = await pool.query(`SELECT COUNT(*)::int AS users FROM auth.users`)
+    res.json({ ok: true, info: info.rows[0], users: cnt.rows[0].users })
+  } catch (e) {
+    res.status(500).json({ ok:false, message:'debug_failed' })
+  }
+})
+
+// Monta il router protetto (una sola volta)
 app.use('/admin/api', requireLogin, adminApi)
 
 // ---------- SMTP / Mail ----------
@@ -151,84 +304,17 @@ app.post('/api/mail/send', async (req, res) => {
   }
 })
 
-//Generazione credenziali accettazione utente
-// Password random (12–16 char, senza caratteri ambigui)
-function genPassword(len = 14) {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
-  let out = ''
-  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return out
-}
+// ---------- Avvio ----------
+const PORT = process.env.PORT || 3000
+app.listen(PORT, async () => {
+  console.log(`API http://localhost:${PORT}`)
 
-/**
- * POST /admin/api/approvals/approve
- * Body: { name, email }
- * - Crea utente in auth.users (password in chiaro, come il tuo /auth)
- * - Invia email con le credenziali
- */
-adminApi.post('/approvals/approve', async (req, res) => {
+  // LOG diagnostico all'avvio (aiuta a capire DB/host/schema e count utenti)
   try {
-    const { name, email } = req.body || {}
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!email || !emailRe.test(email)) {
-      return res.status(400).json({ ok: false, message: 'invalid_email' })
-    }
-
-    const plainPwd = genPassword()
-
-    // NB: hai già search_path 'auth, public', quindi "users" risolve a "auth.users".
-    // Se preferisci, puoi qualificare esplicitamente: INSERT INTO auth.users ...
-    const sql = `
-      INSERT INTO users (email, password)
-      VALUES ($1, $2)
-      ON CONFLICT (email) DO NOTHING
-      RETURNING id, email
-    `
-    const { rows } = await pool.query(sql, [email.toLowerCase(), plainPwd])
-    if (rows.length === 0) {
-      return res.status(409).json({ ok: false, message: 'user_exists' })
-    }
-
-    // Email con credenziali
-    const subject = 'Il tuo accesso a Flows Backoffice'
-    const loginUrl = 'http://localhost:5173/login' // cambia in prod
-    const safeName = name ? `<b>${name}</b>` : 'nuovo utente'
-    const html = `
-      <p>Ciao ${safeName},</p>
-      <p>il tuo account è stato approvato.</p>
-      <p><b>Credenziali</b><br/>
-      Email: <code>${email}</code><br/>
-      Password: <code>${plainPwd}</code></p>
-      <p>Accedi qui: <a href="${loginUrl}">${loginUrl}</a></p>
-      <p>Per sicurezza, modifica la password dopo il primo accesso.</p>
-    `
-    const text =
-`Ciao ${name || 'utente'},
-il tuo account è stato approvato.
-
-Credenziali:
-Email: ${email}
-Password: ${plainPwd}
-
-Accedi: ${loginUrl}
-(Consiglio: modifica la password dopo il primo accesso)`
-
-    await transporter.sendMail({
-      from: process.env.MAIL_FROM || 'no-reply@localhost',
-      to: email,
-      subject,
-      text,
-      html
-    })
-
-    return res.json({ ok: true, user: rows[0] })
-  } catch (err) {
-    console.error('[/admin/api/approvals/approve] error:', err)
-    return res.status(500).json({ ok: false, message: 'server_error' })
+    const info = await pool.query(`SELECT current_database() AS db, inet_server_addr()::text AS host`)
+    const cnt  = await pool.query(`SELECT COUNT(*)::int AS users FROM auth.users`)
+    console.log(`[db] connected to ${info.rows[0].db} @ ${info.rows[0].host}  users=${cnt.rows[0].users}`)
+  } catch (e) {
+    console.warn('[db] startup check failed:', e.message)
   }
 })
-
-
-// ---------- Start ----------
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => console.log(`API http://localhost:${PORT}`))

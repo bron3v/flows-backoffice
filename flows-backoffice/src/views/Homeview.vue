@@ -81,8 +81,12 @@
               <h3>Team</h3>
               <span class="muted">{{ team.length }} membri</span>
             </div>
-
-            <table class="table">
+            
+            
+            <p v-if="teamError" class="err" style="margin: 6px 12px 0;">
+              {{ teamError }}
+            </p>
+            <table class="table" v-if="!teamError">
               <thead>
                 <tr>
                   <th>Nome</th>
@@ -106,8 +110,8 @@
                     <div class="small muted">{{ m.track }}</div>
                   </td>
                   <td>
-                    <span class="badge success" v-if="m.active">Active</span>
-                    <span class="badge danger" v-else>Disabled</span>
+                    <span class="badge success" v-if="m.active">Online</span>
+                    <span class="badge danger" v-else>Offline</span>
                   </td>
                   <td>{{ m.role }}</td>
                   <td class="t-right">
@@ -205,18 +209,39 @@ async function loadStats() {
   }
 }
 
-// Solo FE: niente chiamate, mock se serve
+const teamError = ref('')
 async function loadTeam() {
+  teamError.value = ''
   try {
-    // se hai un endpoint reale, scommenta:
-    // const r = await api.get?.('/admin/api/team')
-    // const items = r?.items || r
-    // team.value = Array.isArray(items) && items.length ? items : sampleTeam()
-    team.value = sampleTeam()
-  } catch {
-    team.value = sampleTeam()
+    const res = await fetch('/admin/api/users', { credentials: 'include' })
+    const data = await res.json().catch(() => ({}))
+
+    if (!res.ok || !data?.ok || !Array.isArray(data.items)) {
+      console.error('GET /admin/api/users failed:', res.status, data)
+      throw new Error(data?.message || `HTTP ${res.status}`)
+    }
+
+    team.value = data.items.map(u => ({
+      id: u.id,
+      name: u.email,
+      email: u.email,
+      title: u.online ? 'Online' : 'Offline',
+      track: u.last_seen ? new Date(u.last_seen).toLocaleString() : '',
+      active: !!u.online,
+      role: 'Member',
+      avatar: undefined
+    }))
+
+    kpi.value.usersOnline = data.items.filter(x => x.online).length
+    kpi.value.usersTotal  = data.items.length
+  } catch (e) {
+    team.value = []                                // niente mock
+    teamError.value = 'Impossibile caricare gli utenti'
   }
 }
+
+
+
 
 // --- handler evento da sidebar: aggiunge subito il nuovo pending ---
 function onNewPending(e) {
