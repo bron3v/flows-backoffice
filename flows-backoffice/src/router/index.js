@@ -141,5 +141,5 @@ export function markLoggedIn () {
   } catch {}
 }
 
-
+  
 export default router

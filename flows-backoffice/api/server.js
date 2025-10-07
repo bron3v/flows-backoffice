@@ -88,9 +88,11 @@ app.post('/auth', async (req, res) => {
 })
 
 app.get('/me', (req, res) => {
-  if (req.session?.loggedIn) return res.json({ ok: true, user: req.session.user })
-  return res.status(401).json({ ok: false, message: 'not_logged_in' })
+  if (!req.session?.loggedIn || !req.session?.user)
+    return res.status(401).json({ ok: false })
+  res.json({ ok: true, user: req.session.user })
 })
+
 
 
 app.post('/auth/logout', (req, res) => {
@@ -101,6 +103,44 @@ app.post('/auth/logout', (req, res) => {
     res.json({ ok: true });
   });
 });
+
+app.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body
+  const user = await findUserByEmail(email)         // tua query
+  const ok = user && await checkPassword(user, password)
+  if (!ok) return res.status(401).json({ ok: false })
+
+  req.session.loggedIn = true
+  req.session.user = { id: user.id, email: user.email } // <-- serve per self-delete
+  res.json({ ok: true, user: req.session.user })
+})
+
+function requireLogin (req, res, next) {
+  if (req.session?.loggedIn) return next()
+  res.status(401).json({ ok: false, message: 'not_logged_in' })
+}
+
+app.delete('/admin/api/users/:id', requireLogin, async (req, res) => {
+  const targetId = String(req.params.id)
+  const myId = String(req.session.user?.id || '')
+
+  if (targetId === myId)
+    return res.status(403).json({ ok: false, message: 'cannot_delete_self' })
+
+  try {
+    const { rows } = await pool.query(
+      'DELETE FROM auth.users WHERE id = $1 RETURNING id',
+      [targetId]
+    )
+    if (rows.length === 0) return res.status(404).json({ ok: false, message: 'user_not_found' })
+    res.json({ ok: true, deletedId: rows[0].id })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ ok: false, message: 'delete_failed' })
+  }
+})
+
+
 
 
 // ---------- Health-check ----------

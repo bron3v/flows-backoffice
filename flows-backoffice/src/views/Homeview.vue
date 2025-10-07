@@ -119,9 +119,15 @@
                   </td>
                   <td>{{ m.role }}</td>
                   <td class="t-right">
-                    <button class="icon-btn green" title="Edit">✎</button>
-                    <button class="icon-btn red" title="Delete">🗑</button>
-                  </td>
+                  <div class="actions">
+                    <button
+                      v-if="!isSelf(m)"
+                      class="icon-btn red"
+                      title="Delete"
+                      @click="removeUser(m)"
+                    >🗑</button>
+                  </div>
+                </td>
                 </tr>
               </tbody>
             </table>
@@ -158,6 +164,15 @@ const kpi = ref({
 
 const pending = ref([])
 const team = ref([])
+
+function isSelf(u) {
+  const me = sessionUser.value
+  if (!me) return false
+  // confronti stringificati per sicurezza su tipi diversi
+  if (me.id != null && u.id != null && String(u.id) === String(me.id)) return true
+  if (me.email && u.email && String(u.email).toLowerCase() === String(me.email).toLowerCase()) return true
+  return false
+}
 
 // --- helper persistenza pending ---
 function savePendingLocally(list) {
@@ -300,6 +315,47 @@ async function approve(u) {
 async function reject(u) {
   pending.value = pending.value.filter(x => x.id !== u.id)
 }
+
+async function removeUser(u) {
+  const ok = confirm(`Eliminare definitivamente l'utente ${u.email}?`)
+  if (!ok) return
+
+  // protezione lato FE (in più rispetto al v-if)
+  if (sessionUser?.value?.id && u.id === sessionUser.value.id) {
+    alert('Non puoi eliminare il tuo stesso account.')
+    return
+  }
+  if (sessionUser?.value?.email && u.email === sessionUser.value.email) {
+    alert('Non puoi eliminare il tuo stesso account.')
+    return
+  }
+
+  try {
+    const res = await fetch(`/admin/api/users/${encodeURIComponent(u.id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const data = await res.json().catch(() => ({}))
+
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.message || `HTTP ${res.status}`)
+    }
+
+    // rimuovi subito dalla tabella
+    team.value = team.value.filter(x => x.id !== u.id)
+
+    // aggiorna KPI
+    kpi.value.usersTotal = Math.max(0, kpi.value.usersTotal - 1)
+    if (u.active) kpi.value.usersOnline = Math.max(0, kpi.value.usersOnline - 1)
+
+    alert(`Utente ${u.email} eliminato.`)
+  } catch (e) {
+    console.error('DELETE /admin/api/users/:id failed', e)
+    alert('Impossibile eliminare l’utente. Riprova.')
+  }
+}
+
 </script>
 
 
