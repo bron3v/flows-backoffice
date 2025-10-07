@@ -16,7 +16,11 @@
             </svg>
             <input placeholder="Search..." />
           </div>
-          <div class="avatar">{{ avatarInitial }}</div>
+          <AvatarCard
+            :avatar-initial="avatarInitial"
+            :user-name="sessionUser?.name || 'Utente'"
+            :user-email="sessionUser?.email || 'name@example.com'"
+          />
         </div>
       </header>
 
@@ -90,7 +94,7 @@
               <thead>
                 <tr>
                   <th>Nome</th>
-                  <th>Titolo</th>
+                  <th>Ultimo accesso</th>
                   <th>Status</th>
                   <th>Ruolo</th>
                   <th class="t-right">Azioni</th>
@@ -134,6 +138,8 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import { api } from '@/utils/api' // tienilo se usi /me e /stats
+import AvatarCard from '@/components/AvatarCard.vue'
+
 
 // stato base
 const router = useRouter()
@@ -142,6 +148,8 @@ const defaultAvatar = 'https://i.pravatar.cc/40?img=1'
 
 const avatarInitial = ref('A')
 const systemName = ref('Flows system')
+const sessionUser = ref(null)
+
 
 const kpi = ref({
   usersTotal: 0,
@@ -178,6 +186,7 @@ async function bootstrap() {
   try {
     const me = await api.me().catch(() => api.meAdmin?.())
     if (!me?.user && !me?.ok) throw new Error('NOT_LOGGED_IN')
+    sessionUser.value = me.user || null 
     const seed = (me.user?.email || me.user?.name || 'A').trim()
     avatarInitial.value = seed ? seed[0].toUpperCase() : 'A'
   } catch (e) {
@@ -242,7 +251,6 @@ async function loadTeam() {
 
 
 
-
 // --- handler evento da sidebar: aggiunge subito il nuovo pending ---
 function onNewPending(e) {
   const item = e.detail
@@ -261,14 +269,7 @@ function samplePending() {
     { id: 3, name: 'Alex Brown', email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5' },
   ]
 }
-function sampleTeam() {
-  return [
-    { id: 10, name: 'John Doe', email: 'john@sample.com', title: 'Software Engineer', track: 'Web dev', active: true, role: 'Owner', avatar: 'https://i.pravatar.cc/40?img=15' },
-    { id: 11, name: 'Sara Lee', email: 'sara@sample.com', title: 'Designer', track: 'UI/UX', active: true, role: 'Editor', avatar: 'https://i.pravatar.cc/40?img=48' },
-    { id: 12, name: 'David Kim', email: 'david@sample.com', title: 'DevOps', track: 'Infra', active: true, role: 'Admin', avatar: 'https://i.pravatar.cc/40?img=22' },
-    { id: 13, name: 'Marta G.', email: 'marta@sample.com', title: 'QA Engineer', track: 'Testing', active: true, role: 'Member', avatar: 'https://i.pravatar.cc/40?img=3' },
-  ]
-}
+
 
 // --- approvazioni SOLO FE: aggiornano la lista + localStorage ---
 async function approve(u) {

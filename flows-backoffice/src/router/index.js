@@ -127,4 +127,19 @@ router.beforeEach(async (to, from, next) => {
   return next()
 })
 
+// --- in src/router/index.js --- (in fondo al file)
+export function markLoggedOut () {
+  try {
+    sessionStorage.setItem('flows_logged', '0')
+    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
+  } catch {}
+}
+export function markLoggedIn () {
+  try {
+    sessionStorage.setItem('flows_logged', '1')
+    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
+  } catch {}
+}
+
+
 export default router

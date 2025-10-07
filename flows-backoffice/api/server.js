@@ -92,9 +92,16 @@ app.get('/me', (req, res) => {
   return res.status(401).json({ ok: false, message: 'not_logged_in' })
 })
 
-app.post('/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }))
-})
+
+app.post('/auth/logout', (req, res) => {
+  req.session?.destroy(err => {
+    // cancella il cookie della sessione (nome default di express-session)
+    res.clearCookie('connect.sid', { path: '/' });
+    if (err) return res.status(500).json({ ok: false, message: 'logout_error' });
+    res.json({ ok: true });
+  });
+});
+
 
 // ---------- Health-check ----------
 app.get('/', (_req, res) => res.send('API up'))
