@@ -10,6 +10,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // API mail (e altre future API non-admin)
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
       // login
       '/auth': {
         target: 'http://localhost:3000',
@@ -28,7 +34,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      // (opzionale) logout, se lo aggiungi lato server
+      // (opzionale) logout
       '/logout': {
         target: 'http://localhost:3000',
         changeOrigin: true,

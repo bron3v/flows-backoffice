@@ -8,39 +8,60 @@
     </div>
 
     <nav class="menu">
-      <RouterLink to="/" class="item active">Dashboard</RouterLink>
-      <RouterLink to="/" class="item">Utenti</RouterLink>
-      <RouterLink to="/" class="item">Tabelle</RouterLink>
-      <RouterLink to="/" class="item">Moduli</RouterLink>
-      <RouterLink to="/" class="item">Impostazioni</RouterLink>
-      <button id="request-button" @click="openModal">New user</button>
+      <RouterLink to="/" class="item" :class="{ active: $route.path==='/' }">Dashboard</RouterLink>
+      <RouterLink to="/utenti" class="item" :class="{ active: $route.path.startsWith('/utenti') }">Utenti</RouterLink>
+      <RouterLink to="/tabelle" class="item" :class="{ active: $route.path.startsWith('/tabelle') }">Tabelle</RouterLink>
+      <RouterLink to="/moduli" class="item" :class="{ active: $route.path.startsWith('/moduli') }">Moduli</RouterLink>
+      <RouterLink to="/impostazioni" class="item" :class="{ active: $route.path.startsWith('/impostazioni') }">Impostazioni</RouterLink>
+
+      <button id="request-button" @click="openModal" :disabled="loading">
+        {{ loading ? 'Invio…' : 'New user' }}
+      </button>
     </nav>
   </aside>
 
-  <!-- Modal: nuova richiesta utente (solo FE) -->
+  <!-- Modal: nuova richiesta utente -->
   <teleport to="body">
-    <div v-if="show" class="overlay" @click.self="closeModal" @keyup.esc="closeModal" tabindex="-1">
+    <div
+      v-if="show"
+      class="overlay"
+      @click.self="closeModal"
+      @keyup.esc="closeModal"
+      tabindex="-1"
+    >
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nu-ttl">
         <h3 id="nu-ttl">Nuova richiesta utente</h3>
 
         <form @submit.prevent="submit">
           <div class="field">
             <label>Nome</label>
-            <input v-model.trim="name" type="text" placeholder="Nome e cognome" required />
+            <input
+              v-model.trim="name"
+              type="text"
+              placeholder="Nome e cognome"
+              required
+              :disabled="loading"
+            />
           </div>
 
           <div class="field">
             <label>Email</label>
-            <input v-model.trim="email" type="email" placeholder="es. name@example.com" required />
+            <input
+              v-model.trim="email"
+              type="email"
+              placeholder="es. name@example.com"
+              required
+              :disabled="loading"
+            />
           </div>
 
           <p v-if="error" class="err">{{ error }}</p>
-          <p v-if="ok" class="ok">Richiesta salvata!</p>
+          <p v-if="ok" class="ok">Richiesta inviata! Controlla la casella di posta.</p>
 
           <div class="btns">
-            <button type="button" class="btn secondary" @click="closeModal">Annulla</button>
+            <button type="button" class="btn secondary" @click="closeModal" :disabled="loading">Annulla</button>
             <button class="btn primary" :disabled="loading">
-              {{ loading ? 'Salvo…' : 'Invia richiesta' }}
+              {{ loading ? 'Invio…' : 'Invia richiesta' }}
             </button>
           </div>
         </form>
@@ -67,8 +88,7 @@ function openModal () {
   nextTick(() => document.querySelector('.modal input[type="text"]')?.focus())
 }
 
-function closeModal () {
-  show.value = false
+function resetState () {
   name.value = ''
   email.value = ''
   loading.value = false
@@ -76,54 +96,69 @@ function closeModal () {
   ok.value = false
 }
 
+function closeModal () {
+  show.value = false
+  resetState()
+}
+
+function isEmail (s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
+}
+
 async function submit () {
   error.value = ''
   ok.value = false
 
-  // validazione minima FE
   if (!name.value || !email.value) {
     error.value = 'Compila tutti i campi'
     return
   }
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRe.test(email.value)) {
+  if (!isEmail(email.value)) {
     error.value = 'Email non valida'
     return
   }
 
   loading.value = true
   try {
-    // salva SOLO in localStorage
-    const pending = JSON.parse(localStorage.getItem('flows_pending') || '[]')
+    const res = await fetch('/api/mail/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name: name.value, email: email.value }) // il backend può ignorare name
+    })
+
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data?.message || 'Errore durante l’invio')
+
+    ok.value = true
+
+    // opzionale: notifica altre parti dell’app
     const item = {
       id: Date.now(),
       name: name.value,
       email: email.value,
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
-    pending.push(item)
-    localStorage.setItem('flows_pending', JSON.stringify(pending))
-
-    // notifica l’app (Home aggiorna subito)
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: item }))
 
-    ok.value = true
-    setTimeout(closeModal, 600)
-  } catch {
-    error.value = 'Impossibile salvare la richiesta'
+    // chiude dopo un attimo
+    setTimeout(closeModal, 700)
+  } catch (e) {
+    error.value = e?.message || 'Errore di rete'
   } finally {
     loading.value = false
   }
 }
 
 // Esc globale
-function onKey (e) { if (e.key === 'Escape' && show.value) closeModal() }
+function onKey (e) {
+  if (e.key === 'Escape' && show.value) closeModal()
+}
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <style scoped>
-/* (stili identici ai tuoi, li lascio come sono) */
 .sidebar{
   width: 240px;
   min-height: 100vh;
@@ -142,9 +177,25 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .item:hover{ background:rgba(255,255,255,.06); color:#fff; }
 .item.active{ background:#1f2937; color:#fff; }
 @media (max-width: 960px){ .sidebar{ display:none; } }
-/* Pulsante */
-#request-button{ position: fixed; bottom: 20px; padding: 12px 20px; background:#6ee7b7; color: white; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: all 0.3s ease; }
+
+/* Pulsante flottante nella sidebar */
+#request-button{
+  position: fixed;
+  left: 16px; /* allinea dentro la sidebar */
+  bottom: 20px;
+  padding: 12px 20px;
+  background:#10b981;
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
+  z-index: 10;
+}
 #request-button:hover { box-shadow: 0 6px 14px rgba(0,0,0,0.25); }
+
 /* Modal */
 .overlay{
   position: fixed; inset: 0;
@@ -159,7 +210,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   box-shadow: 0 22px 60px rgba(15,23,42,.28);
   padding: 22px 22px 18px;
   border: 1px solid #e5e7eb;
-  overflow: hidden; /* evita che il focus-ring “sbordi” */
+  overflow: hidden; 
 }
 .modal h3{
   margin: 2px 0 14px;
@@ -191,7 +242,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   border-color:#10b981;
   box-shadow: 0 0 0 2px rgba(16,185,129,.25) inset;
 }
-/* FIX autofill Chrome/Edge */
 .field input:-webkit-autofill{
   -webkit-box-shadow: 0 0 0 1000px #e8eef6 inset !important;
   -webkit-text-fill-color:#0f172a !important;
@@ -205,4 +255,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .btn.primary{ background:#10b981; color:#fff; box-shadow:0 8px 24px rgba(16,185,129,.22); }
 .btn.primary:hover{ filter:brightness(1.03); }
 .btn:disabled{ opacity:.7; cursor:not-allowed; }
+
+.ok { color:#059669; margin-top:4px; }
+.err { color:#dc2626; margin-top:4px; }
 </style>

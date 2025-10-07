@@ -1,108 +1,156 @@
-const path = require('path');
-const express = require('express');
-const session = require('express-session');
-const { Pool } = require('pg');
+// api/server.js
+const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '.env') })
 
-const app = express();
+const express = require('express')
+const session = require('express-session')
+const { Pool } = require('pg')
+const nodemailer = require('nodemailer')
 
+const app = express()
+
+// ---------- Postgres ----------
 const pool = new Pool({
-  host: '172.19.16.1', // Host del server Postgres
-  user: 'postgres',           
-  password: 'FPW',            
-  database: 'flows-backoffice', 
-  port: 5432 // Porta standard Postgres
-});
+  host: '172.19.16.1',
+  user: 'postgres',
+  password: 'FPW',
+  database: 'flows-backoffice',
+  port: 5432
+})
 
-//Impostazione del search_path, schema "auth" è visto di default
+// search_path di default: schema "auth" poi "public"
 pool.on('connect', (client) => {
-  client.query('SET search_path TO auth, public');
-});
+  client.query('SET search_path TO auth, public')
+})
 
-// Body parsers
-// Abilitazione lettura di body "application/x-www-form-urlencoded" e "application/json" dalle richieste HTTP.
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// ---------- Parsers ----------
+app.use(express.urlencoded({ extended: true }))
+app.use(express.json())
 
-// Sessione (dev)
-// Abilita sessioni lato server
-// - secret: chiave per firmare il cookie di sessione
-// - resave/saveUninitialized: evita scritture inutili.
-// - cookie.secure: TODO: in produzione impostare a true per HTTPS
-// - sameSite: 'lax' riduce rischi CSRF mantenendo compatibilità con navigazioni "normali".
+// ---------- Sessioni ----------
 app.use(session({
   secret: 'secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false, sameSite: 'lax' }
-}));
+}))
 
-
-// Endpoint di autenticazione:
-// - Validazione presenza di email e password nel body.
-// - Esecuzione di query su Postgres per evitare problemi di SQL injection.
-// - Se trova l'utente, crea la sessione e restituisce { ok: true, user }.
-// - Altrimenti, restituisce 401 con "invalid_credentials".
+// ---------- Auth ----------
 app.post('/auth', async (req, res) => {
   try {
-    console.log('[/auth] body:', req.body);
-    const { email, password } = req.body || {};
+    const { email, password } = req.body || {}
     if (!email || !password) {
-      return res.status(400).json({ ok: false, message: 'missing_fields' });
+      return res.status(400).json({ ok: false, message: 'missing_fields' })
     }
 
-    //Confronto password in chiaro. TODO: usare hash bcrypt.
-    const sql = 'SELECT id, email FROM users WHERE email = $1 AND password = $2 LIMIT 1';
-    const { rows } = await pool.query(sql, [email, password]);
+    // TODO: usare password hash (bcrypt)
+    const sql = 'SELECT id, email FROM users WHERE email = $1 AND password = $2 LIMIT 1'
+    const { rows } = await pool.query(sql, [email, password])
 
-    console.log('[/auth] rows:', rows.length);
     if (rows.length !== 1) {
-      return res.status(401).json({ ok: false, message: 'invalid_credentials' });
+      return res.status(401).json({ ok: false, message: 'invalid_credentials' })
     }
 
-    // Salvataggio dello stato di login nella sessione (server-side) e info utente non sensibili.
-    req.session.loggedIn = true;
-    req.session.user = { id: rows[0].id, email: rows[0].email };
-    return res.json({ ok: true, user: req.session.user });
+    req.session.loggedIn = true
+    req.session.user = { id: rows[0].id, email: rows[0].email }
+    return res.json({ ok: true, user: req.session.user })
   } catch (err) {
-    console.error('[/auth] error:', err);
-    return res.status(500).json({ ok: false, message: 'server_error' });
+    console.error('[/auth] error:', err)
+    return res.status(500).json({ ok: false, message: 'server_error' })
   }
-});
+})
 
-// Endpoint di verifica sessione:
-// - Se la sessione esiste e l'utente è loggato, ritorna { ok: true, user }.
-// - Altrimenti 401 "not_logged_in".
 app.get('/me', (req, res) => {
-  if (req.session?.loggedIn) return res.json({ ok: true, user: req.session.user });
-  return res.status(401).json({ ok: false, message: 'not_logged_in' });
-});
+  if (req.session?.loggedIn) return res.json({ ok: true, user: req.session.user })
+  return res.status(401).json({ ok: false, message: 'not_logged_in' })
+})
 
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }))
+})
 
-// Health-check per verificare che il server risponde.
-app.get('/', (_req, res) => {
-  res.send('API up');
-});
+// ---------- Health-check ----------
+app.get('/', (_req, res) => res.send('API up'))
 
-// server.js
-function requireLogin(req,res,next){ if(req.session?.loggedIn) return next(); res.status(401).json({ok:false,message:'not_logged_in'}); }
-const adminApi = require('express').Router();
-adminApi.get('/stats', (req,res)=> res.json({ ok:true, user:req.session.user, stats:{ uptime: process.uptime() }}));
-app.use('/admin/api', requireLogin, adminApi);
+// ---------- Guard ----------
+function requireLogin (req, res, next) {
+  if (req.session?.loggedIn) return next()
+  res.status(401).json({ ok: false, message: 'not_logged_in' })
+}
 
+// ---------- Router admin protetto ----------
+const adminApi = express.Router()
 
-// Esempi di endpoint interni
 adminApi.get('/stats', (req, res) => {
-  res.json({ ok: true, user: req.session.user, stats: { uptime: process.uptime() } });
-});
+  res.json({ ok: true, user: req.session.user, stats: { uptime: process.uptime() } })
+})
 
 adminApi.get('/users/me', (req, res) => {
-  res.json({ ok: true, user: req.session.user });
-});
+  res.json({ ok: true, user: req.session.user })
+})
 
-// Monta il router con la guardia
-app.use('/admin/api', requireLogin, adminApi);
+// Monta UNA sola volta
+app.use('/admin/api', requireLogin, adminApi)
 
+// ---------- SMTP / Mail ----------
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: Number(process.env.SMTP_PORT) === 465, // true solo se porta 465
+  auth: (process.env.SMTP_USER && process.env.SMTP_PASS)
+    ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    : undefined
+})
 
-const PORT = process.env.PORT || 3000;
-// Avvio del server HTTP su PORT (default 3000). Stampa dell'URL locale d'ascolto.
-app.listen(PORT, () => console.log(`API http://localhost:${PORT}`));
+// Verifica facoltativa all’avvio (utile in dev)
+transporter.verify()
+  .then(() => console.log('[mail] SMTP ok'))
+  .catch(err => console.warn('[mail] SMTP verify failed:', err?.message))
+
+function isEmail (s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
+}
+
+/**
+ * POST /api/mail/send
+ * Body: { email, name? }
+ * Invia un’email al destinatario; in dev puoi forzare con MAIL_TO_OVERRIDE
+ */
+app.post('/api/mail/send', async (req, res) => {
+  try {
+    const { email, name } = req.body || {}
+    if (!email || !isEmail(email)) {
+      return res.status(400).json({ message: 'Email non valida' })
+    }
+
+    const to = (process.env.MAIL_TO_OVERRIDE && process.env.MAIL_TO_OVERRIDE.trim())
+      ? process.env.MAIL_TO_OVERRIDE.trim()
+      : email
+
+    const subject = 'Benvenuto su Flows'
+    const html = `
+      <p>Ciao ${name ? `<b>${name}</b>` : ''} 👋</p>
+      <p>Abbiamo ricevuto la tua richiesta con indirizzo <b>${email}</b>.</p>
+      <p>Ti ricontatteremo appena l'admin approverà l’accesso.</p>
+    `
+    const text = `Ciao ${name || ''}\nAbbiamo ricevuto la tua richiesta con indirizzo ${email}.`
+
+    const info = await transporter.sendMail({
+      from: process.env.MAIL_FROM || 'no-reply@localhost',
+      to,
+      subject,
+      text,
+      html
+    })
+
+    console.log('[mail] sent', info.messageId)
+    res.json({ message: 'Email inviata con successo' })
+  } catch (err) {
+    console.error('[/api/mail/send] error:', err)
+    res.status(500).json({ message: 'Errore durante l’invio' })
+  }
+})
+
+// ---------- Start ----------
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => console.log(`API http://localhost:${PORT}`))
