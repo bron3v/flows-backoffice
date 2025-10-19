@@ -1,96 +1,77 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 
- //Definizione delle route dell'app.
+// --- Views lazy ---
+const Home = () => import('../views/Homeview.vue')
+const Login = () => import('../views/Loginview.vue')
+
+// --- Routes ---
 const routes = [
-  {
-    path: '/',
-    name: 'home',
-    component: () => import('../views/Homeview.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    path: '/login',
-    name: 'login',
-    component: () => import('../views/Loginview.vue'),
-  },
-  // Catch-all: qualsiasi rotta sconosciuta rimanda alla home o a una 404
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  { path: '/', name: 'home', component: Home, meta: { requiresAuth: true } },
+  { path: '/login', name: 'login', component: Login },
+  { path: '/:pathMatch(.*)*', redirect: '/' } // catch-all
 ]
 
-/**
- * History "HTML5" con base URL presa dalla configurazione di Vite.
- * scrollBehavior: resetta lo scroll in alto su ogni navigazione.
- */
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 }),
 })
 
-/**
- * Mini cache (sessionStorage) per lo stato di login:
- * - '1' = loggato, '0' = non loggato
- * - timestamp per invalidare la cache dopo TTL (per evitare /me continui)
- */
+// --- Mini cache auth ---
 const AUTH_CACHE_KEY = 'flows_logged'
 const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
-const AUTH_CACHE_TTL_MS = 30_000 // 30s: abbastanza breve per restare coerenti
+const AUTH_CACHE_TTL_MS = 15_000 // 15s: reattivo ma evita spam di /me
 
-let inFlightAuthPromise = null // evita richieste /me parallele
+let inFlightAuthPromise = null
 
-/**
- * ensureAuthSynced()
- * - Ritorna true/false se l'utente è loggato.
- * - Usa prima la cache locale; se scaduta o assente, chiama /me (con cookie).
- * - Gestisce sia risposte JSON che testo semplice.
- */
+function safeSetSession(k, v) {
+  try { sessionStorage.setItem(k, v) } catch {}
+}
+function safeGetSession(k) {
+  try { return sessionStorage.getItem(k) } catch { return null }
+}
+
+function getRedirectQuery(to) {
+  // evita redirect ricorsivi o malevoli
+  const q = to?.query?.redirect
+  if (typeof q !== 'string') return null
+  if (q.startsWith('http://') || q.startsWith('https://')) return '/' // no open-redirect
+  return q || null
+}
+
 async function ensureAuthSynced () {
-  //Prova cache se non scaduta
-  try {
-    const cached = sessionStorage.getItem(AUTH_CACHE_KEY)
-    const ts = Number(sessionStorage.getItem(AUTH_CACHE_TS_KEY) || 0)
-    const fresh = Date.now() - ts < AUTH_CACHE_TTL_MS
-
-    if ((cached === '1' || cached === '0') && fresh) {
-      return cached === '1'
-    }
-  } catch {
-    // Ignora errori su sessionStorage
+  // cache
+  const cached = safeGetSession(AUTH_CACHE_KEY)
+  const ts = Number(safeGetSession(AUTH_CACHE_TS_KEY) || 0)
+  const fresh = Date.now() - ts < AUTH_CACHE_TTL_MS
+  if ((cached === '1' || cached === '0') && fresh) {
+    return cached === '1'
   }
 
-  //Evita richieste parallele: riusa la stessa promise se esiste
+  // evita richieste parallele
   if (inFlightAuthPromise) {
-    try {
-      return await inFlightAuthPromise
-    } catch {
-      // Se fallisce, continua con una nuova richiesta
-    }
+    try { return await inFlightAuthPromise } catch { /* retry below */ }
   }
 
   inFlightAuthPromise = (async () => {
     try {
       const res = await fetch('/me', { credentials: 'include' })
-      const ct = res.headers.get('content-type') || ''
       let data = null
+      const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {
         data = await res.json()
       } else {
         await res.text().catch(() => {})
       }
-
       const logged = res.ok && data?.ok === true
-      try {
-        sessionStorage.setItem(AUTH_CACHE_KEY, logged ? '1' : '0')
-        sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
-      } catch {}
-
+      safeSetSession(AUTH_CACHE_KEY, logged ? '1' : '0')
+      safeSetSession(AUTH_CACHE_TS_KEY, String(Date.now()))
       return logged
     } catch {
-      // In caso di rete offline o errore generico: considera non loggato e cache brevemente
-      try {
-        sessionStorage.setItem(AUTH_CACHE_KEY, '0')
-        sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
-      } catch {}
+      // offline / errore generico → considera non loggato per poco
+      safeSetSession(AUTH_CACHE_KEY, '0')
+      safeSetSession(AUTH_CACHE_TS_KEY, String(Date.now()))
       return false
     } finally {
       inFlightAuthPromise = null
@@ -100,46 +81,37 @@ async function ensureAuthSynced () {
   return await inFlightAuthPromise
 }
 
-/**
- * beforeEach:
- * - Se la rotta richiede auth e non sei loggato → vai a /login
- *   (passando ?redirect=<rotta-desiderata> per tornare dopo il login)
- * - Se vai su /login ma sei già loggato → rimanda a '/'
- */
-router.beforeEach(async (to, from, next) => {
-  const requiresAuth = Boolean(to.meta.requiresAuth)
-
-  // Sincronizza lo stato di login con il server (cache + /me)
-  const logged = await ensureAuthSynced()
-
-  if (requiresAuth && !logged) {
-    // Conserva la rotta che volevi visitare per il redirect post-login
-    const redirect = to.fullPath && to.fullPath !== '/' ? { redirect: to.fullPath } : {}
-    return next({ path: '/login', query: redirect })
-  }
-
-  if (to.path === '/login' && logged) {
-    // Già loggato: torna alla home (o a redirect se presente)
-    const back = from && from.fullPath ? from.fullPath : '/'
-    return next(back === '/login' ? '/' : back)
-  }
-
-  return next()
-})
-
-// --- in src/router/index.js --- (in fondo al file)
-export function markLoggedOut () {
+// src/router/index.js
+async function meWithTimeout(ms = 3000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort('timeout'), ms);
   try {
-    sessionStorage.setItem('flows_logged', '0')
-    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
-  } catch {}
+    const res = await fetch('/me', { credentials: 'include', cache: 'no-store', signal: ctrl.signal });
+    if (!res.ok) return false;
+    const j = await res.json().catch(() => null);
+    return j?.ok === true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+router.beforeEach(async (to, from, next) => {
+  if (!to.meta.requiresAuth) return next();
+  const ok = await meWithTimeout(3000); // mai attendere all’infinito
+  if (ok) return next();
+  return next({ path: '/login', query: { redirect: to.fullPath } });
+});
+
+// --- helpers usati dal Login view ---
+export function markLoggedOut () {
+  safeSetSession(AUTH_CACHE_KEY, '0')
+  safeSetSession(AUTH_CACHE_TS_KEY, String(Date.now()))
 }
 export function markLoggedIn () {
-  try {
-    sessionStorage.setItem('flows_logged', '1')
-    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
-  } catch {}
+  safeSetSession(AUTH_CACHE_KEY, '1')
+  safeSetSession(AUTH_CACHE_TS_KEY, String(Date.now()))
 }
 
-  
 export default router

@@ -11,23 +11,24 @@
         <div class="top-actions">
           <div class="search">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z" stroke="currentColor"
-                stroke-width="2" fill="none" stroke-linecap="round" />
+              <path
+                d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
+                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
             </svg>
             <input placeholder="Search..." />
           </div>
+
+          <!-- Avatar: usa username -->
           <AvatarCard
             :avatar-initial="avatarInitial"
-            :user-name="sessionUser?.name || 'Utente'"
-            :user-email="sessionUser?.email || 'name@example.com'"
+            :user-name="sessionUser?.username || 'Utente'"
+            :user-email="sessionUser?.username || 'username'"
           />
         </div>
       </header>
 
-      <!-- Content grid: left = approvazioni, right = dashboard -->
+      <!-- Content grid -->
       <section class="content">
-        <!-- NIENTE aside separato -->
-
         <!-- Colonna dashboard -->
         <section class="dashboard">
           <!-- KPI -->
@@ -54,7 +55,7 @@
             </div>
           </div>
 
-          <!-- ✅ Utenti da approvare DOPO i KPI -->
+          <!-- Utenti da approvare DOPO i KPI -->
           <div class="card approvals-card">
             <div class="card-head">
               <h3>Utenti da approvare</h3>
@@ -66,8 +67,8 @@
                 <li v-for="u in pending" :key="u.id" class="pending-item">
                   <img :src="u.avatar || defaultAvatar" alt="" />
                   <div class="meta">
-                    <strong>{{ u.name }}</strong>
-                    <small>{{ u.email }}</small>
+                    <strong>{{ u.name || (u.email && u.email.split('@')[0]) || 'Nuovo utente' }}</strong>
+                    <small>{{ u.email || '—' }}</small>
                   </div>
                   <div class="actions">
                     <button class="ok" @click="approve(u)">✓</button>
@@ -85,16 +86,16 @@
               <h3>Team</h3>
               <span class="muted">{{ team.length }} membri</span>
             </div>
-            
-            
+
             <p v-if="teamError" class="err" style="margin: 6px 12px 0;">
               {{ teamError }}
             </p>
+
             <table class="table" v-if="!teamError">
               <thead>
                 <tr>
-                  <th>Nome</th>
-                  <th>Ultimo accesso</th>
+                  <th>Username</th>
+                  <th>Sessione</th>
                   <th>Status</th>
                   <th>Ruolo</th>
                   <th class="t-right">Azioni</th>
@@ -105,47 +106,52 @@
                   <td class="person">
                     <img :src="m.avatar || defaultAvatar" alt="" />
                     <div>
-                      <div class="name">{{ m.name }}</div>
-                      <div class="small muted">{{ m.email }}</div>
+                      <div class="name">{{ m.username || m.name }}</div>
+                      <!-- se vuoi un sottotitolo, usa ancora l'username -->
+                      <div class="small muted">{{ m.username }}</div>
                     </div>
                   </td>
+
+                  <!-- "Sessione": non avendo last_seen, mostriamo un segnaposto o il track se valorizzato -->
                   <td>
                     <div class="name">{{ m.title }}</div>
-                    <div class="small muted">{{ m.track }}</div>
+                    <div class="small muted">{{ m.track || '—' }}</div>
                   </td>
+
                   <td>
                     <span class="badge success" v-if="m.active">Online</span>
                     <span class="badge danger" v-else>Offline</span>
                   </td>
+
                   <td>{{ m.role }}</td>
+
                   <td class="t-right">
-                  <div class="actions">
-                    <button
-                      v-if="!isSelf(m)"
-                      class="icon-btn red"
-                      title="Delete"
-                      @click="removeUser(m)"
-                    >🗑</button>
-                  </div>
-                </td>
+                    <div class="actions">
+                      <button
+                        v-if="!isSelf(m)"
+                        class="icon-btn red"
+                        title="Delete"
+                        @click="removeUser(m)"
+                      >🗑</button>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </section>
       </section>
-
     </main>
   </div>
 </template>
+
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
-import { api } from '@/utils/api' // tienilo se usi /me e /stats
+import { api } from '@/utils/api'
 import AvatarCard from '@/components/AvatarCard.vue'
-
 
 // stato base
 const router = useRouter()
@@ -156,11 +162,7 @@ const avatarInitial = ref('A')
 const systemName = ref('Flows system')
 const sessionUser = ref(null)
 
-
-const kpi = ref({
-  usersTotal: 0,
-  usersOnline: 0,
-})
+const kpi = ref({ usersTotal: 0, usersOnline: 0 })
 
 const pending = ref([])
 const team = ref([])
@@ -168,13 +170,12 @@ const team = ref([])
 function isSelf(u) {
   const me = sessionUser.value
   if (!me) return false
-  // confronti stringificati per sicurezza su tipi diversi
   if (me.id != null && u.id != null && String(u.id) === String(me.id)) return true
-  if (me.email && u.email && String(u.email).toLowerCase() === String(me.email).toLowerCase()) return true
+  if (me.username && u.username && String(u.username).toLowerCase() === String(me.username).toLowerCase()) return true
   return false
 }
 
-// --- helper persistenza pending ---
+// --- helper persistenza pending (solo FE) ---
 function savePendingLocally(list) {
   localStorage.setItem('flows_pending', JSON.stringify(list))
 }
@@ -186,7 +187,6 @@ function loadPendingLocally() {
 // --- bootstrap pagina ---
 onMounted(() => {
   bootstrap()
-  // ascolta nuove richieste solo FE dalla sidebar
   window.addEventListener('flows:new-pending', onNewPending)
 })
 onBeforeUnmount(() => {
@@ -197,26 +197,26 @@ onBeforeUnmount(() => {
 watch(pending, v => savePendingLocally(v), { deep: true })
 
 async function bootstrap() {
-  // 1) verifica sessione per avatar (se usi auth); altrimenti commenta questo blocco
+  // 1) verifica sessione
   try {
-    const me = await api.me().catch(() => api.meAdmin?.())
-    if (!me?.user && !me?.ok) throw new Error('NOT_LOGGED_IN')
-    sessionUser.value = me.user || null 
-    const seed = (me.user?.email || me.user?.name || 'A').trim()
+    const me = await api.me()
+    if (!me?.ok || !me?.user) throw new Error('NOT_LOGGED_IN')
+    sessionUser.value = me.user
+    const seed = (me.user?.username || 'A').trim()
     avatarInitial.value = seed ? seed[0].toUpperCase() : 'A'
-  } catch (e) {
+  } catch {
     const redirect = route.fullPath || '/'
     router.push({ path: '/login', query: { redirect } })
     return
   }
 
-  // 2) stats KPI (se hai endpoint; altrimenti fallback)
+  // 2) stats KPI
   await loadStats()
 
-  // 3) pending solo da localStorage (NO backend)
+  // 3) pending locale (mock FE)
   pending.value = loadPendingLocally()
 
-  // 4) team (se hai endpoint usa api, altrimenti mock)
+  // 4) team dal backend
   await loadTeam()
 }
 
@@ -224,11 +224,11 @@ async function loadStats() {
   try {
     const s = await api.stats()
     const st = s?.stats || s || {}
-    kpi.value.usersTotal = Number(st.usersTotal ?? st.totalUsers ?? 50)
-    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? 20)
+    kpi.value.usersTotal = Number(st.usersTotal ?? st.totalUsers ?? 0)
+    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? 0)
     if (st.systemName) systemName.value = String(st.systemName)
   } catch {
-    kpi.value = { usersTotal: 50, usersOnline: 20 }
+    kpi.value = { usersTotal: 0, usersOnline: 0 }
     systemName.value = 'Flows system'
   }
 }
@@ -237,41 +237,37 @@ const teamError = ref('')
 async function loadTeam() {
   teamError.value = ''
   try {
-    const res = await fetch('/admin/api/users', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-
-    if (!res.ok || !data?.ok || !Array.isArray(data.items)) {
-      console.error('GET /admin/api/users failed:', res.status, data)
-      throw new Error(data?.message || `HTTP ${res.status}`)
+    const data = await api.usersList() // { ok, items }
+    if (!data?.ok || !Array.isArray(data.items)) {
+      throw new Error(data?.message || 'BAD_PAYLOAD')
     }
 
+    // mappo al formato usato dalle card (uso username anche come "email" di display)
     team.value = data.items.map(u => ({
-      id: u.id ?? u.user_id ?? u._id ?? null,   // <-- aggiunto
-      name: u.email,
-      email: u.email,
+      id: u.id ?? null,
+      username: u.username,
+      name: u.username,
+      email: u.username, // per compatibilità con UI esistente
       title: u.online ? 'Online' : 'Offline',
-      track: u.last_seen ? new Date(u.last_seen).toLocaleString() : '',
+      track: '', // non abbiamo last_seen ora
       active: !!u.online,
       role: 'Member',
       avatar: undefined
     }))
 
-
     kpi.value.usersOnline = data.items.filter(x => x.online).length
     kpi.value.usersTotal  = data.items.length
   } catch (e) {
-    team.value = []                                // niente mock
+    console.error('GET /admin/api/users failed:', e)
+    team.value = []
     teamError.value = 'Impossibile caricare gli utenti'
   }
 }
-
-
 
 // --- handler evento da sidebar: aggiunge subito il nuovo pending ---
 function onNewPending(e) {
   const item = e.detail
   if (!item || !item.id) return
-  // Evita duplicati per id
   if (!pending.value.some(p => p.id === item.id)) {
     pending.value = [item, ...pending.value]
   }
@@ -286,15 +282,21 @@ function samplePending() {
   ]
 }
 
-
-// --- approvazioni SOLO FE: aggiornano la lista + localStorage ---
+// --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
   try {
+    // username suggerito = local-part dell'email se presente, altrimenti name sanificato
+    const suggestedUsername =
+      (u.email && String(u.email).split('@')[0]) ||
+      (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) ||
+      ''
+
+    const payload = { name: u.name, email: u.email, username: suggestedUsername || undefined }
     const res = await fetch('/admin/api/approvals/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name: u.name, email: u.email })
+      body: JSON.stringify(payload)
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data?.ok) {
@@ -306,7 +308,9 @@ async function approve(u) {
       throw new Error(data?.message || 'Errore approvazione')
     }
     pending.value = pending.value.filter(x => x.id !== u.id)
-    alert(`Utente creato e email inviata a ${u.email}`)
+    alert(`Utente creato${u.email ? ' e email inviata a ' + u.email : ''}.`)
+    // opzionale: ricarica la lista utenti per riflettere l’aggiunta
+    await loadTeam()
   } catch (e) {
     console.error(e)
     alert('Impossibile approvare la richiesta. Riprova.')
@@ -318,31 +322,27 @@ async function reject(u) {
 }
 
 async function removeUser(u) {
-  const ok = confirm(`Eliminare definitivamente l'utente ${u.email}?`)
+  const ok = confirm(`Eliminare definitivamente l'utente ${u.username || u.email || u.id}?`)
   if (!ok) return
 
-  if (sessionUser?.value?.id && String(u.id) === String(sessionUser.value.id)) {
-    alert('Non puoi eliminare il tuo stesso account.')
-    return
-  }
-  if (sessionUser?.value?.email && String(u.email).toLowerCase() === String(sessionUser.value.email).toLowerCase()) {
+  if (isSelf(u)) {
     alert('Non puoi eliminare il tuo stesso account.')
     return
   }
 
-  // Scegli identificatore: prima id, altrimenti email
-  const hasId = u.id != null && String(u.id).trim() !== ''
-  const url = hasId
-    ? `/admin/api/users/${encodeURIComponent(String(u.id))}`                   // DELETE by id
-    : `/admin/api/users/by-email/${encodeURIComponent(String(u.email))}`       // DELETE by email (fallback)
+  // Serve l'id: l’endpoint by-email è stato rimosso nel nuovo server
+  const id = u?.id
+  if (id == null || String(id).trim() === '') {
+    alert('Impossibile eliminare: id utente mancante.')
+    return
+  }
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`/admin/api/users/${encodeURIComponent(String(id))}`, {
       method: 'DELETE',
       credentials: 'include'
     })
 
-    // prova a leggere JSON, altrimenti testo
     let payload = {}
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) {
@@ -356,8 +356,7 @@ async function removeUser(u) {
       throw new Error(msg)
     }
 
-    // ok → rimuovi dalla tabella e aggiorna KPI
-    team.value = team.value.filter(x => x.id !== u.id && x.email !== u.email)
+    team.value = team.value.filter(x => x.id !== id)
     kpi.value.usersTotal = Math.max(0, kpi.value.usersTotal - 1)
     if (u.active) kpi.value.usersOnline = Math.max(0, kpi.value.usersOnline - 1)
   } catch (e) {
@@ -365,9 +364,8 @@ async function removeUser(u) {
     alert(`Impossibile eliminare l’utente: ${e.message}`)
   }
 }
-
-
 </script>
+
 
 
 <style scoped>

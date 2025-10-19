@@ -1,49 +1,51 @@
 // src/utils/api.js
-async function request(path, { method = 'GET', body, headers } = {}) {
+
+export async function request(path, { method = 'GET', body, headers } = {}) {
   const opts = {
     method,
-    credentials: 'include',            // <-- manda i cookie di sessione
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
   };
-  if (body !== undefined) opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+  if (body !== undefined) {
+    opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+  }
 
   const res = await fetch(path, opts);
-  if (res.status === 401) {
-    // opzionale: lascia traccia che non sei loggato
-    throw new Error('NOT_LOGGED_IN');
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status}`);
-  }
-  // prova JSON, altrimenti restituisci Response grezzo
   const ct = res.headers.get('content-type') || '';
-  return ct.includes('application/json') ? res.json() : res;
-}
+  const payload = ct.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : await res.text().catch(() => '');
 
-// --- wrapper comodi ---
-// src/utils/api.js
-export const api = {
-  async login(email, password) {
-    const res = await fetch('/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',             // serve per la sessione
-      body: JSON.stringify({ email, password })
-    })
-    const data = await res.json().catch(() => ({}))
-    return { ok: res.ok, status: res.status, data }
-  },
-
-  async me() {
-    const res = await fetch('/me', { credentials: 'include' })
-    const data = await res.json().catch(() => ({}))
-    return { ok: res.ok, status: res.status, ...data }
-  },
-
-  async stats() {
-    const res = await fetch('/admin/api/stats', { credentials: 'include' })
-    return res.json()
+  if (!res.ok) {
+    const err = new Error(payload?.message || `HTTP ${res.status}`);
+    err.status = res.status;   // <<< attacco lo status
+    err.data = payload;
+    throw err;
   }
+  return payload;
 }
 
+export const api = {
+  async login(username, password) {
+    try {
+      return await request('/auth/login', {
+        method: 'POST',
+        body: { username, password },
+      });
+    } catch (err) {
+      if (err.status === 401) {
+        // mappa il 401 in un risultato “non ok” così il tuo doLogin continua a funzionare
+        return { ok: false, message: 'invalid_credentials' };
+      }
+      throw err;
+    }
+  },
+
+  logout() { return request('/auth/logout', { method: 'POST' }); },
+  me() { return request('/me'); },
+  stats() { return request('/admin/api/stats'); },
+  usersList() { return request('/admin/api/users'); },
+  deleteUser(id) { return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
+  approveUser(payload) { return request('/admin/api/approvals/approve', { method: 'POST', body: payload }); },
+  sendMail({ email, name }) { return request('/api/mail/send', { method: 'POST', body: { email, name } }); },
+};

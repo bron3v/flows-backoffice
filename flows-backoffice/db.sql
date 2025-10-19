@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
 ALTER TABLE auth.users
 ADD COLUMN IF NOT EXISTS last_seen timestamptz DEFAULT now();
 
-SELECT email, now() - last_seen AS diff FROM auth.users ORDER BY last_seen DESC;
+
 
 
 

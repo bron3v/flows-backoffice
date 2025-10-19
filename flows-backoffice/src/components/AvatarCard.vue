@@ -1,10 +1,10 @@
 <template>
-  <!-- Wrapper che mostra l'avatar e gestisce l'apertura -->
+  <!-- Trigger -->
   <div class="avatar-wrapper" ref="triggerRef" @click="open = true">
     <div class="avatar">{{ avatarInitial }}</div>
   </div>
 
-  <!-- Overlay + Card (teletrasportata nel body per z-index pulito) -->
+  <!-- Overlay + Card -->
   <teleport to="body">
     <transition name="fade">
       <div v-if="open" class="overlay" @click.self="close" aria-hidden="true"></div>
@@ -27,15 +27,22 @@
           <div class="user-row">
             <div class="avatar big">{{ avatarInitial }}</div>
             <div class="u-info">
-              <strong class="u-name">{{ userName }}</strong>
-              <span class="u-mail">{{ userEmail }}</span>
+              <strong class="u-name">{{ userNameDisplay }}</strong>
+              <span class="u-mail">{{ userSecondLine }}</span>
             </div>
           </div>
         </div>
 
         <footer class="card-footer">
           <button type="button" class="btn btn-ghost" @click="close">Annulla</button>
-          <button type="button" class="btn btn-primary" @click="logout">Logout</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="loggingOut"
+            @click="logout"
+          >
+            {{ loggingOut ? 'Logout…' : 'Logout' }}
+          </button>
         </footer>
       </section>
     </transition>
@@ -43,47 +50,52 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { markLoggedOut } from '@/router' 
+import { markLoggedOut } from '@/router'
 
 const props = defineProps({
   avatarInitial: { type: String, default: 'A' },
+  // Nel nuovo sistema questo è lo username visuale
   userName: { type: String, default: 'Utente' },
-  userEmail: { type: String, default: 'name@example.com' },
-  // opzionale: endpoint per logout server-side (se esiste)
+  // Può essere vuoto: se non presente, mostriamo comunque lo username anche sotto
+  userEmail: { type: String, default: '' },
   logoutUrl: { type: String, default: '/auth/logout' },
 })
 
 const router = useRouter()
 const open = ref(false)
+const loggingOut = ref(false)
 const triggerRef = ref(null)
 const cardRef = ref(null)
+
+const userNameDisplay = computed(() => props.userName || 'Utente')
+const userSecondLine = computed(() => props.userEmail || props.userName || '—')
 
 function close () { open.value = false }
 
 async function logout () {
+  if (loggingOut.value) return
+  loggingOut.value = true
   try {
-    await fetch('/auth/logout', {
+    await fetch(props.logoutUrl, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' }
     }).catch(() => {})
   } finally {
     // Disattiva il guard client
-    markLoggedOut()    
+    markLoggedOut()
     sessionStorage.setItem('flows_logged', '0')
     sessionStorage.removeItem('flows_user')
     localStorage.removeItem('flows_user')
 
-    // vai al login e “taglia” lo storico
+    // chiudi card e vai al login
+    open.value = false
     router.replace('/login')
-
-    // fallback hard (se il guard o la cache ti riportano indietro)
-    // setTimeout(() => location.href = '/login', 50)
+    loggingOut.value = false
   }
 }
-
 
 function onKey (e) { if (e.key === 'Escape') close() }
 
@@ -95,6 +107,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
 })
 </script>
+
 
 <style scoped>
 /* Avatar nella topbar */

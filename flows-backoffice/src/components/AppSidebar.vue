@@ -40,7 +40,7 @@
               type="text"
               placeholder="Nome e cognome"
               required
-              :disabled="loading"
+              :disabled="loading || ok"
             />
           </div>
 
@@ -51,7 +51,7 @@
               type="email"
               placeholder="es. name@example.com"
               required
-              :disabled="loading"
+              :disabled="loading || ok"
             />
           </div>
 
@@ -60,7 +60,7 @@
 
           <div class="btns">
             <button type="button" class="btn secondary" @click="closeModal" :disabled="loading">Annulla</button>
-            <button class="btn primary" :disabled="loading">
+            <button class="btn primary" :disabled="loading || ok">
               {{ loading ? 'Invio…' : 'Invia richiesta' }}
             </button>
           </div>
@@ -73,6 +73,7 @@
 <script setup>
 import { RouterLink } from 'vue-router'
 import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { api } from '@/utils/api'
 
 const show = ref(false)
 const name = ref('')
@@ -102,7 +103,7 @@ function closeModal () {
 }
 
 function isEmail (s) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
 }
 
 async function submit () {
@@ -120,19 +121,12 @@ async function submit () {
 
   loading.value = true
   try {
-    const res = await fetch('/api/mail/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ name: name.value, email: email.value }) // il backend può ignorare name
-    })
-
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(data?.message || 'Errore durante l’invio')
+    // usa il wrapper API (manda cookie e headers corretti)
+    await api.sendMail({ email: email.value, name: name.value })
 
     ok.value = true
 
-    // opzionale: notifica altre parti dell’app
+    // notifica la dashboard per aggiungere subito la “pending”
     const item = {
       id: Date.now(),
       name: name.value,
@@ -141,10 +135,10 @@ async function submit () {
     }
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: item }))
 
-    // chiude dopo un attimo
+    // chiudi dopo un breve delay
     setTimeout(closeModal, 700)
   } catch (e) {
-    error.value = e?.message || 'Errore di rete'
+    error.value = e?.message || 'Errore durante l’invio'
   } finally {
     loading.value = false
   }
@@ -157,6 +151,7 @@ function onKey (e) {
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
+
 
 <style scoped>
 .sidebar{

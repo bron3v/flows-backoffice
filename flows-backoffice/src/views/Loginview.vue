@@ -11,9 +11,9 @@
         <form @submit.prevent="doLogin">
           <div class="form-group">
             <input
-              v-model.trim="email"
-              type="email"
-              placeholder="E-mail"
+              v-model.trim="usernameOrEmail"
+              type="text"
+              placeholder="Username o e-mail"
               required
               class="input"
               autocomplete="username"
@@ -52,7 +52,7 @@ import { api } from '@/utils/api'
 const AUTH_CACHE_KEY = 'flows_logged'
 const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
 
-const email = ref('')
+const usernameOrEmail = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -60,47 +60,42 @@ const error = ref('')
 const router = useRouter()
 const route = useRoute()
 
-function isEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '') }
-
 async function doLogin () {
   error.value = ''
-  // validazione minima
-  if (!isEmail(email.value) || !password.value) {
-    error.value = 'Inserisci email e password valide'
+  if (!usernameOrEmail.value || !password.value) {
+    error.value = 'Inserisci username (o e-mail) e password'
     return
   }
 
   loading.value = true
   try {
-    const { ok, status, data } = await api.login(email.value, password.value)
-
-    if (!ok || !data?.ok || !data?.user) {
-      // mapping errori comuni
-      if (status === 401 || data?.message === 'invalid_credentials') {
-        error.value = 'Email o password errati'
-      } else if (status === 400) {
-        error.value = 'Compila tutti i campi'
-      } else {
-        error.value = 'Errore del server'
-      }
-      // marca login fallito per il guard
-      sessionStorage.setItem(AUTH_CACHE_KEY, '0')
-      sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
+    const res = await api.login(usernameOrEmail.value, password.value)
+    const ok = res?.ok === true && !!res?.user
+    if (!ok) {
+      sessionStorage.setItem('flows_logged', '0')
+      sessionStorage.setItem('flows_logged_ts', String(Date.now()))
+      error.value = 'Credenziali errate'
       return
     }
 
-    // successo: cache e redirect
-    sessionStorage.setItem(AUTH_CACHE_KEY, '1')
-    sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
+    sessionStorage.setItem('flows_logged', '1')
+    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
+
+    // warm-up della sessione: se fallisce, ci penserà il guard
+    try { await api.me() } catch {}
 
     const back = (typeof route.query.redirect === 'string' && route.query.redirect) ? route.query.redirect : '/'
-    await router.push(back)
-  } catch (e) {
+    router.push(back)         // <-- non usare await
+  } catch {
     error.value = 'Errore di connessione'
+    sessionStorage.setItem('flows_logged', '0')
+    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
   } finally {
     loading.value = false
   }
 }
+
+
 </script>
 
 
