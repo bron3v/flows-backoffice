@@ -15,7 +15,7 @@
                 d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
                 stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
             </svg>
-            <input placeholder="Search..." />
+            <input placeholder="Search..." v-model="q" />
           </div>
 
           <!-- Avatar: usa username -->
@@ -84,7 +84,7 @@
           <div class="card">
             <div class="card-head">
               <h3>Team</h3>
-              <span class="muted">{{ team.length }} membri</span>
+              <span class="muted">{{ filteredTeam.length }} membri</span>
             </div>
 
             <p v-if="teamError" class="err" style="margin: 6px 12px 0;">
@@ -94,33 +94,25 @@
             <table class="table" v-if="!teamError">
               <thead>
                 <tr>
-                  <th>Username</th>
-                  <th>Sessione</th>
-                  <th>Status</th>
+                  <th>Utente</th>
+                  <th>Online</th>
                   <th>Ruolo</th>
                   <th class="t-right">Azioni</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="m in team" :key="m.id">
+                <tr v-for="m in filteredTeam" :key="m.id">
                   <td class="person">
                     <img :src="m.avatar || defaultAvatar" alt="" />
                     <div>
                       <div class="name">{{ m.username || m.name }}</div>
-                      <!-- se vuoi un sottotitolo, usa ancora l'username -->
                       <div class="small muted">{{ m.username }}</div>
                     </div>
                   </td>
 
-                  <!-- "Sessione": non avendo last_seen, mostriamo un segnaposto o il track se valorizzato -->
-                  <td>
-                    <div class="name">{{ m.title }}</div>
-                    <div class="small muted">{{ m.track || '—' }}</div>
-                  </td>
-
                   <td>
                     <span class="badge success" v-if="m.active">Online</span>
-                    <span class="badge danger" v-else>Offline</span>
+                    <span class="badge danger"  v-else>Offline</span>
                   </td>
 
                   <td>{{ m.role }}</td>
@@ -145,9 +137,8 @@
   </div>
 </template>
 
-
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import { api } from '@/utils/api'
@@ -159,13 +150,15 @@ const route = useRoute()
 const defaultAvatar = 'https://i.pravatar.cc/40?img=1'
 
 const avatarInitial = ref('A')
-const systemName = ref('Flows system')
-const sessionUser = ref(null)
+const systemName   = ref('Flows system')
+const sessionUser  = ref(null)
 
 const kpi = ref({ usersTotal: 0, usersOnline: 0 })
 
 const pending = ref([])
-const team = ref([])
+const team    = ref([])
+
+const q = ref('') // filtro ricerca
 
 function isSelf(u) {
   const me = sessionUser.value
@@ -175,22 +168,42 @@ function isSelf(u) {
   return false
 }
 
+// filtro client-side
+const filteredTeam = computed(() => {
+  const term = q.value.trim().toLowerCase()
+  if (!term) return team.value
+  return team.value.filter(m =>
+    String(m.username || '').toLowerCase().includes(term) ||
+    String(m.name || '').toLowerCase().includes(term)
+  )
+})
+
 // --- helper persistenza pending (solo FE) ---
 function savePendingLocally(list) {
-  localStorage.setItem('flows_pending', JSON.stringify(list))
+  try { localStorage.setItem('flows_pending', JSON.stringify(list)) } catch {}
 }
 function loadPendingLocally() {
-  const saved = localStorage.getItem('flows_pending')
-  return saved ? JSON.parse(saved) : samplePending()
+  try {
+    const saved = localStorage.getItem('flows_pending')
+    return saved ? JSON.parse(saved) : samplePending()
+  } catch { return samplePending() }
 }
 
 // --- bootstrap pagina ---
+let intervalId = null
+
 onMounted(() => {
   bootstrap()
+  window.addEventListener('focus', onFocusRefresh)
   window.addEventListener('flows:new-pending', onNewPending)
+  // auto refresh ogni 30s per aggiornare "online"
+  intervalId = setInterval(refreshUsersAndKpi, 30_000)
 })
+
 onBeforeUnmount(() => {
+  window.removeEventListener('focus', onFocusRefresh)
   window.removeEventListener('flows:new-pending', onNewPending)
+  if (intervalId) clearInterval(intervalId)
 })
 
 // salva pending ad ogni modifica (solo FE)
@@ -210,7 +223,7 @@ async function bootstrap() {
     return
   }
 
-  // 2) stats KPI
+  // 2) stats KPI (se fallisce, ricalcoliamo da team)
   await loadStats()
 
   // 3) pending locale (mock FE)
@@ -220,16 +233,26 @@ async function bootstrap() {
   await loadTeam()
 }
 
+async function onFocusRefresh() {
+  await refreshUsersAndKpi()
+}
+
+async function refreshUsersAndKpi() {
+  await Promise.all([loadTeam(), loadStats().catch(() => {})])
+  // in ogni caso, riallinea KPI con ciò che vedi a schermo
+  kpi.value.usersOnline = team.value.filter(x => x.active).length
+  kpi.value.usersTotal  = team.value.length
+}
+
 async function loadStats() {
   try {
     const s = await api.stats()
     const st = s?.stats || s || {}
-    kpi.value.usersTotal = Number(st.usersTotal ?? st.totalUsers ?? 0)
-    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? 0)
+    kpi.value.usersTotal  = Number(st.usersTotal ?? st.totalUsers ?? kpi.value.usersTotal ?? 0)
+    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? kpi.value.usersOnline ?? 0)
     if (st.systemName) systemName.value = String(st.systemName)
   } catch {
-    kpi.value = { usersTotal: 0, usersOnline: 0 }
-    systemName.value = 'Flows system'
+    // fallback: lascio ai dati di team
   }
 }
 
@@ -237,26 +260,27 @@ const teamError = ref('')
 async function loadTeam() {
   teamError.value = ''
   try {
-    const data = await api.usersList() // { ok, items }
-    if (!data?.ok || !Array.isArray(data.items)) {
-      throw new Error(data?.message || 'BAD_PAYLOAD')
-    }
+    const data = await api.usersList() // { ok, items } o { users: [...] }
+    // accetta entrambi i payload
+    const items = Array.isArray(data?.items) ? data.items
+                 : Array.isArray(data?.users) ? data.users
+                 : []
 
-    // mappo al formato usato dalle card (uso username anche come "email" di display)
-    team.value = data.items.map(u => ({
-      id: u.id ?? null,
-      username: u.username,
-      name: u.username,
-      email: u.username, // per compatibilità con UI esistente
-      title: u.online ? 'Online' : 'Offline',
-      track: '', // non abbiamo last_seen ora
-      active: !!u.online,
-      role: 'Member',
-      avatar: undefined
-    }))
+    // mappo al formato usato dalle card
+    team.value = items.map(u => ({
+    id: u.id ?? null,
+    username: u.username,
+    name: u.username,
+    email: u.username,
+    active: !!u.online,     // <— SOLO questo
+    role: u.role || 'Member',
+    avatar: undefined
+  }))
 
-    kpi.value.usersOnline = data.items.filter(x => x.online).length
-    kpi.value.usersTotal  = data.items.length
+
+    // riallinea KPI ai dati correnti
+    kpi.value.usersOnline = team.value.filter(x => x.active).length
+    kpi.value.usersTotal  = team.value.length
   } catch (e) {
     console.error('GET /admin/api/users failed:', e)
     team.value = []
@@ -276,16 +300,15 @@ function onNewPending(e) {
 // --- dati di fallback ---
 function samplePending() {
   return [
-    { id: 1, name: 'John Doe', email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11' },
-    { id: 2, name: 'Jane Smith', email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32' },
-    { id: 3, name: 'Alex Brown', email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5' },
+    { id: 1, name: 'John Doe',  email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11' },
+    { id: 2, name: 'Jane Smith',email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32' },
+    { id: 3, name: 'Alex Brown',email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5'  },
   ]
 }
 
 // --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
   try {
-    // username suggerito = local-part dell'email se presente, altrimenti name sanificato
     const suggestedUsername =
       (u.email && String(u.email).split('@')[0]) ||
       (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) ||
@@ -309,7 +332,6 @@ async function approve(u) {
     }
     pending.value = pending.value.filter(x => x.id !== u.id)
     alert(`Utente creato${u.email ? ' e email inviata a ' + u.email : ''}.`)
-    // opzionale: ricarica la lista utenti per riflettere l’aggiunta
     await loadTeam()
   } catch (e) {
     console.error(e)
@@ -330,7 +352,6 @@ async function removeUser(u) {
     return
   }
 
-  // Serve l'id: l’endpoint by-email è stato rimosso nel nuovo server
   const id = u?.id
   if (id == null || String(id).trim() === '') {
     alert('Impossibile eliminare: id utente mancante.')
@@ -365,8 +386,6 @@ async function removeUser(u) {
   }
 }
 </script>
-
-
 
 <style scoped>
 /* Layout base */
@@ -449,7 +468,6 @@ async function removeUser(u) {
   padding: 18px;
 }
 
-
 .pending-list {
   list-style: none;
   padding: 0;
@@ -504,21 +522,11 @@ async function removeUser(u) {
   font-weight: 700;
 }
 
-.ok {
-  background: #22c55e;
-}
+.ok { background: #22c55e; }
+.ok:hover { filter: brightness(.95); }
 
-.ok:hover {
-  filter: brightness(.95);
-}
-
-.ko {
-  background: #ef4444;
-}
-
-.ko:hover {
-  filter: brightness(.95);
-}
+.ko { background: #ef4444; }
+.ko:hover { filter: brightness(.95); }
 
 .empty {
   color: #64748b;
@@ -558,29 +566,17 @@ async function removeUser(u) {
   position: relative;
 }
 
-.kpi-icon.users {
-  background: #eef2ff;
-}
-
-.kpi-icon.orders {
-  background: #ecfeff;
-}
+.kpi-icon.users { background: #eef2ff; }
+.kpi-icon.orders { background: #ecfeff; }
 
 .kpi-val {
   font-weight: 800;
   font-size: 1.25rem;
   color: #0f172a;
 }
+.kpi-label { color: #64748b; }
 
-.kpi-label {
-  color: #64748b;
-}
-
-.kpi-icon.products {
-  background: #f0fdf4;
-  position: relative;
-}
-
+.kpi-icon.products { background: #f0fdf4; position: relative; }
 .kpi-icon.products::after {
   content: '✓';
   position: absolute;
@@ -609,20 +605,10 @@ async function removeUser(u) {
   border-bottom: 1px solid #e5e7eb;
 }
 
-.card-head h3 {
-  margin: 0;
-  font-size: 1rem;
-}
+.card-head h3 { margin: 0; font-size: 1rem; }
+.muted { color: #6b7280; }
 
-.muted {
-  color: #6b7280;
-}
-
-.table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
+.table { width: 100%; border-collapse: separate; border-spacing: 0; }
 
 .table thead th {
   text-align: left;
@@ -645,24 +631,11 @@ async function removeUser(u) {
   align-items: center;
   gap: 10px;
 }
+.person img { width: 34px; height: 34px; border-radius: 50%; }
 
-.person img {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-.name {
-  font-weight: 600;
-}
-
-.small {
-  font-size: .85rem;
-}
-
-.t-right {
-  text-align: right;
-}
+.name { font-weight: 600; }
+.small { font-size: .85rem; }
+.t-right { text-align: right; }
 
 .badge {
   padding: 4px 8px;
@@ -670,16 +643,8 @@ async function removeUser(u) {
   font-size: .75rem;
   font-weight: 700;
 }
-
-.badge.success {
-  background: #ecfdf5;
-  color: #16a34a;
-}
-
-.badge.danger {
-  background: #fef2f2;
-  color: #ef4444;
-}
+.badge.success { background: #ecfdf5; color: #16a34a; }
+.badge.danger  { background: #fef2f2; color: #ef4444; }
 
 .icon-btn {
   border: none;
@@ -689,33 +654,16 @@ async function removeUser(u) {
   cursor: pointer;
   margin-left: 6px;
 }
-
-.icon-btn.green {
-  color: #16a34a;
-}
-
-.icon-btn.red {
-  color: #ef4444;
-}
-
-.icon-btn:hover {
-  filter: brightness(.96);
-}
+.icon-btn.green { color: #16a34a; }
+.icon-btn.red   { color: #ef4444; }
+.icon-btn:hover { filter: brightness(.96); }
 
 /* Responsive */
 @media (max-width: 1100px) {
-  .content {
-    grid-template-columns: 1fr;
-  }
-
-  .approvals {
-    position: static;
-  }
+  .content { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
-  .kpi-row {
-    grid-template-columns: 1fr;
-  }
+  .kpi-row { grid-template-columns: 1fr; }
 }
 </style>

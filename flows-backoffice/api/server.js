@@ -15,16 +15,16 @@ const app = express()
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: false, // metti true solo se usi SSL
+      ssl: false, // abilita solo se necessario
       max: 10,
       idleTimeoutMillis: 30000
     })
   : new Pool({
-      host: process.env.PGHOST || '172.19.16.1',   // allineato
+      host: process.env.PGHOST || '172.19.16.1',
       port: Number(process.env.PGPORT || 5432),
-      user: process.env.PGUSER || 'postgres',    // allineato
-      password: process.env.PGPASSWORD || 'postgres', // allineato
-      database: process.env.PGDATABASE || 'FLOWS',    // allineato
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || 'postgres',
+      database: process.env.PGDATABASE || 'FLOWS',
       ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
       max: 10,
       idleTimeoutMillis: 30000,
@@ -34,9 +34,10 @@ pool.on('connect', (client) => {
   client.query('SET search_path TO public')
 })
 
+// (facoltativo) export per altri moduli
 module.exports = { pool }
 
-// helper DB
+// ---------- Helper DB ----------
 async function findUserByUsername (username) {
   const sql = `
     SELECT id, username, password_hash
@@ -49,7 +50,7 @@ async function findUserByUsername (username) {
 }
 
 async function createUser (username, plainPassword) {
-  const hash = await bcrypt.hash(plainPassword, 10) // cost adeguato (dump ha cost 6)
+  const hash = await bcrypt.hash(plainPassword, 10)
   const sql = `
     INSERT INTO public.users (username, password_hash)
     VALUES ($1, $2)
@@ -80,7 +81,7 @@ app.use(session({
     pool,
     schemaName: 'public',
     tableName: 'session',
-    createTableIfMissing: true,           // <<< AGGIUNGI QUESTO IN DEV
+    createTableIfMissing: true, // utile in dev
   }),
   secret: process.env.SESSION_SECRET || 'change-me-in-prod',
   resave: false,
@@ -88,14 +89,41 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,                        // <<< in dev forzalo a false
-    maxAge: 14 * 24 * 60 * 60 * 1000
+    secure: false, // in dev
+    maxAge: 14 * 24 * 60 * 60 * 1000, // 14 giorni
   }
 }))
 
-
-// LOG semplice di tutte le richieste (prima delle route)
+// ---------- Heartbeat lastSeen (max 1/min) ----------
+// ---------- Heartbeat lastSeen (aggiorna SUBITO al primo hit, poi max 1/min) ----------
 app.use((req, res, next) => {
+  try {
+    if (req.session?.userId && req.sessionID) {
+      const now  = Date.now()
+      const last = Number(req.session.lastSeenTs || 0)
+
+      const isFirstTouch = !req.session.lastSeenTs
+      const shouldUpdate = isFirstTouch || (now - last > 60_000)
+
+      if (shouldUpdate) {
+        req.session.lastSeenTs = String(now)
+        // best-effort: persisti anche nella tabella session (campo JSON sess)
+        pool.query(
+          `UPDATE public.session
+             SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
+                      to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
+           WHERE sid = $2`,
+          [now, req.sessionID]
+        ).catch(()=>{})
+      }
+    }
+  } catch {}
+  next()
+})
+
+
+// ---------- Log richieste (dev) ----------
+app.use((req, _res, next) => {
   console.log(`[req] ${req.method} ${req.url}`)
   next()
 })
@@ -103,19 +131,41 @@ app.use((req, res, next) => {
 // ---------- Auth ----------
 app.post('/auth/login', async (req, res) => {
   try {
-    console.log('[auth/login] hit', req.body)
     const { username, password } = req.body || {}
     if (!username || !password) {
       return res.status(400).json({ ok: false, message: 'missing_fields' })
     }
-
     const user = await findUserByUsername(username)
     const ok = user && await checkPassword(user, password)
     if (!ok) return res.status(401).json({ ok: false, message: 'invalid_credentials' })
 
     req.session.loggedIn = true
     req.session.user = { id: user.id, username: user.username }
-    req.session.userId = user.id  
+    req.session.userId = user.id
+    // ... dopo aver validato username/password ...
+    req.session.loggedIn = true
+    req.session.user     = { id: user.id, username: user.username }
+    req.session.userId   = user.id
+
+    // Scrivi lastSeen SUBITO al login (salva la sessione su DB, poi aggiorna il JSON)
+    const now = Date.now()
+    req.session.lastSeenTs = String(now)
+    req.session.save(err => {
+      if (!err) {
+        // best-effort: aggiorna il campo JSON 'lastSeen' nel record della sessione
+        pool.query(
+          `UPDATE public.session
+            SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
+                      to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
+          WHERE sid = $2`,
+          [now, req.sessionID]
+        ).catch(()=>{})
+      }
+    })
+
+    // rispondi al client
+    return res.json({ ok: true, user: req.session.user })
+
     return res.json({ ok: true, user: req.session.user })
   } catch (err) {
     console.error('[/auth/login] error:', err)
@@ -141,7 +191,6 @@ app.get('/auth/ping', (req, res) => {
   })
 })
 
-
 app.get('/me', (req, res) => {
   if (!req.session?.loggedIn || !req.session?.user) {
     return res.status(401).json({ ok: false })
@@ -158,14 +207,20 @@ function requireLogin (req, res, next) {
 // ---------- Router admin protetto ----------
 const adminApi = express.Router()
 
-// Stats da DB condiviso: numero utenti + online via sessioni attive
+// Definizione "ONLINE": sessione valida + lastSeen negli ultimi 10 minuti
+const ONLINE_WINDOW_SQL = `NOW() - INTERVAL '10 minutes'`
+
+// Stats coerenti con la definizione di ONLINE
 adminApi.get('/stats', async (_req, res) => {
   try {
     const qTotal = `SELECT COUNT(*)::int AS total FROM public.users`
     const qOnline = `
       SELECT COUNT(DISTINCT (sess->>'userId'))::int AS online
       FROM public.session
-      WHERE expire > now() AND (sess->>'userId') IS NOT NULL
+      WHERE expire > NOW()
+        AND (sess->>'userId') IS NOT NULL
+        AND to_timestamp(COALESCE((sess->>'lastSeenTs')::bigint,0)/1000.0)
+            > NOW() - INTERVAL '10 minutes'
     `
     const [{ rows: t1 }, { rows: t2 }] = await Promise.all([
       pool.query(qTotal),
@@ -191,7 +246,7 @@ adminApi.get('/users/me', (req, res) => {
   res.json({ ok: true, user: req.session.user })
 })
 
-// Lista utenti + flag online basato su sessioni
+// Lista utenti + flag online (definizione coerente con stats)
 adminApi.get('/users', async (_req, res) => {
   try {
     const sql = `
@@ -201,8 +256,10 @@ adminApi.get('/users', async (_req, res) => {
         EXISTS (
           SELECT 1
           FROM public.session s
-          WHERE s.expire > now()
+          WHERE s.expire > NOW()
             AND (s.sess->>'userId')::int = u.id
+            AND to_timestamp(COALESCE((s.sess->>'lastSeenTs')::bigint,0)/1000.0)
+                > NOW() - INTERVAL '1 minutes'
         ) AS online
       FROM public.users u
       ORDER BY online DESC, username ASC
@@ -233,7 +290,7 @@ adminApi.delete('/users/:id', requireLogin, async (req, res) => {
   }
 })
 
-// Approva: crea utente (username = email o name sanificato) + invia credenziali
+// Approva: crea utente + invio credenziali (se email presente)
 function genPassword (len = 14) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
   let out = ''
@@ -252,7 +309,6 @@ adminApi.post('/approvals/approve', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'invalid_email' })
     }
 
-    // decidi username: priorità al campo username, altrimenti usa email come username
     const finalUsername = (username || email).toLowerCase()
     const plainPwd = genPassword()
     const user = await createUser(finalUsername, plainPwd)
@@ -260,7 +316,6 @@ adminApi.post('/approvals/approve', async (req, res) => {
       return res.status(409).json({ ok: false, message: 'user_exists' })
     }
 
-    // invio mail se presente email
     if (email) {
       const subject = 'Il tuo accesso a Flows Backoffice'
       const loginUrl = process.env.LOGIN_URL || 'http://localhost:5173/login'
@@ -301,18 +356,7 @@ Accedi: ${loginUrl}
   }
 })
 
-// --- Diagnostica (DEV)
-adminApi.get('/debug/db', async (_req, res) => {
-  try {
-    const info = await pool.query(`SELECT current_database() AS db, current_schema() AS schema`)
-    const cnt = await pool.query(`SELECT COUNT(*)::int AS users FROM public.users`)
-    res.json({ ok: true, info: info.rows[0], users: cnt.rows[0].users })
-  } catch (e) {
-    res.status(500).json({ ok:false, message:'debug_failed' })
-  }
-})
-
-// monta il router protetto
+// Monta router admin protetto
 app.use('/admin/api', requireLogin, adminApi)
 
 // ---------- SMTP / Mail ----------
@@ -332,6 +376,17 @@ transporter.verify()
 // ---------- Health-check ----------
 app.get('/', (_req, res) => res.send('API up'))
 
+// ---------- Cleanup sessioni scadute ----------
+async function cleanupExpiredSessions() {
+  try {
+    await pool.query(`DELETE FROM public.session WHERE expire <= NOW()`)
+  } catch (e) {
+    console.warn('[session cleanup] failed:', e?.message)
+  }
+}
+cleanupExpiredSessions()
+setInterval(cleanupExpiredSessions, 60 * 60 * 1000) // ogni ora
+
 // ---------- Avvio ----------
 const PORT = process.env.PORT || 3000
 app.listen(PORT, async () => {
@@ -344,6 +399,3 @@ app.listen(PORT, async () => {
     console.warn('[db] startup check failed:', e.message)
   }
 })
-
-
-
