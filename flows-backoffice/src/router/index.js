@@ -35,16 +35,26 @@ async function meWithTimeout(ms = 2500) {
 }
 
 // Guardie
-router.beforeEach(async (to, from, next) => {
-  // Solo le rotte protette richiedono /me
-  if (to.meta.requiresAuth) {
-    const ok = await meWithTimeout()
-    if (ok) return next()
-    const red = encodeURIComponent(to.fullPath)
-    return next(`/login?redirect=${red}`)
-  }
-  // IMPORTANTISSIMO: nessun redirect automatico dalla /login → /app
-  return next()
-})
+router.beforeEach((to, from, next) => {
+  const logged = sessionStorage.getItem('flows_logged') === '1';
 
-export default router
+  // 1) Rotte protette: obbliga al login se non loggato
+  if (to.meta?.requiresAuth && !logged) {
+    const redirect = encodeURIComponent(to.fullPath || '/');
+    return next(`/login?redirect=${redirect}`);
+  }
+
+  // 2) Se sei già loggato e provi ad andare su /login:
+  if (to.path.startsWith('/login') && logged) {
+    // se arrivavi da una pagina protetta (es. /app, /, ecc.) resta lì
+    if (from?.matched?.some(r => r.meta?.requiresAuth)) {
+      return next(false); // ❗ annulla la navigazione: rimani dove sei
+    }
+    // altrimenti manda alla home/app
+    return next('/app'); // se non hai /app, usa '/'
+  }
+
+  return next();
+});
+
+export default router;
