@@ -77,23 +77,31 @@ function close () { open.value = false }
 async function logout () {
   if (loggingOut.value) return
   loggingOut.value = true
+
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort('timeout'), 2500)
+
   try {
     await fetch(props.logoutUrl, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
+      keepalive: true,
+      signal: ctrl.signal,
     }).catch(() => {})
   } finally {
-    // Disattiva il guard client
+    clearTimeout(t)
     markLoggedOut()
-    sessionStorage.setItem('flows_logged', '0')
-    sessionStorage.removeItem('flows_user')
-    localStorage.removeItem('flows_user')
-
-    // chiudi card e vai al login
+    try { sessionStorage.removeItem('flows_user') } catch {}
+    try { localStorage.removeItem('flows_user') } catch {}
     open.value = false
-    router.replace('/login')
     loggingOut.value = false
+    try {
+      if (router.currentRoute.value.path !== '/login') {
+        await router.replace('/login')
+      }
+    } catch {
+      window.location.assign('/login')
+    }
   }
 }
 

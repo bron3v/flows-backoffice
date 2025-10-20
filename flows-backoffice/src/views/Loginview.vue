@@ -48,9 +48,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api } from '@/utils/api'
-
-const AUTH_CACHE_KEY = 'flows_logged'
-const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
+import { markLoggedIn } from '@/router'
 
 const usernameOrEmail = ref('')
 const password = ref('')
@@ -60,43 +58,41 @@ const error = ref('')
 const router = useRouter()
 const route = useRoute()
 
-async function doLogin () {
+function sanitizeRedirect(q) {
+  if (typeof q !== 'string' || !q) return '/app'
+  if (q.startsWith('http://') || q.startsWith('https://')) return '/app'
+  return q
+}
+
+async function doLogin() {
   error.value = ''
-  if (!usernameOrEmail.value || !password.value) {
+  const user = usernameOrEmail.value.trim()
+  const pass = password.value
+
+  if (!user || !pass) {
     error.value = 'Inserisci username (o e-mail) e password'
     return
   }
 
   loading.value = true
   try {
-    const res = await api.login(usernameOrEmail.value, password.value)
+    const res = await api.login(user, pass) // POST /auth/login
     const ok = res?.ok === true && !!res?.user
     if (!ok) {
-      sessionStorage.setItem('flows_logged', '0')
-      sessionStorage.setItem('flows_logged_ts', String(Date.now()))
       error.value = 'Credenziali errate'
       return
     }
-
-    sessionStorage.setItem('flows_logged', '1')
-    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
-
-    // warm-up della sessione: se fallisce, ci penserà il guard
+    markLoggedIn()
     try { await api.me() } catch {}
-
-    const back = (typeof route.query.redirect === 'string' && route.query.redirect) ? route.query.redirect : '/'
-    router.push(back)         // <-- non usare await
+    router.replace(sanitizeRedirect(route.query.redirect))
   } catch {
     error.value = 'Errore di connessione'
-    sessionStorage.setItem('flows_logged', '0')
-    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
   } finally {
     loading.value = false
   }
 }
-
-
 </script>
+
 
 
 <style scoped>
