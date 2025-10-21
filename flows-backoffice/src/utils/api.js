@@ -17,7 +17,6 @@ export async function request(path, { method = 'GET', body, headers } = {}) {
   const payload = ct.includes('application/json')
     ? await res.json().catch(() => ({}))
     : await res.text().catch(() => '');
-
   // --- Guardia universale 401 per /admin/api/* e co. ---
   if (res.status === 401) {
     // invalida lo stato locale
@@ -71,5 +70,5 @@ export const api = {
   usersList() { return request('/admin/api/users'); },
   deleteUser(id) { return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
   approveUser(payload) { return request('/admin/api/approvals/approve', { method: 'POST', body: payload }); },
-  sendMail({ email, name }) { return request('/api/mail/send', { method: 'POST', body: { email, name } }); },
+    
 };

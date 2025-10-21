@@ -106,6 +106,16 @@ function isEmail (s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
 }
 
+// username "pulito" derivato dal nome (senza usare l'email)
+function makeUsername (fullName) {
+  return String(fullName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')           // spazi -> punti
+    .replace(/[^a-z0-9_.-]/g, '')   // solo caratteri sicuri
+    .slice(0, 32)                   // limiti ragionevoli
+}
+
 async function submit () {
   error.value = ''
   ok.value = false
@@ -119,26 +129,39 @@ async function submit () {
     return
   }
 
+  const payload = {
+    name: name.value.trim(),
+    email: email.value.trim().toLowerCase(),
+    username: makeUsername(name.value)
+  }
+
   loading.value = true
   try {
-    // usa il wrapper API (manda cookie e headers corretti)
-    await api.sendMail({ email: email.value, name: name.value })
+    // ✅ crea/approva l'utente (il backend può anche inviare la mail qui dentro)
+    const res = await api.approveUser(payload)
 
     ok.value = true
 
-    // notifica la dashboard per aggiungere subito la “pending”
-    const item = {
+    // aggiorna subito la lista "pending"/utenti in dashboard
+    const created = res?.user ?? {
       id: Date.now(),
-      name: name.value,
-      email: email.value,
+      name: payload.name,
+      email: payload.email,
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
-    window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: item }))
+    window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
 
-    // chiudi dopo un breve delay
     setTimeout(closeModal, 700)
   } catch (e) {
-    error.value = e?.message || 'Errore durante l’invio'
+    // messaggi comuni: 409 (email già esistente), 422 (validazione), ecc.
+    const msg = e?.data?.message || e?.message || ''
+    if (e?.status === 409) {
+      error.value = 'Questa email esiste già'
+    } else if (e?.status === 422) {
+      error.value = msg || 'Dati non validi'
+    } else {
+      error.value = msg || 'Errore durante la creazione'
+    }
   } finally {
     loading.value = false
   }
@@ -151,6 +174,7 @@ function onKey (e) {
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
+
 
 
 <style scoped>
