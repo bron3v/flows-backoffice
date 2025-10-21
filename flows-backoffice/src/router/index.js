@@ -3,14 +3,17 @@ import { createRouter, createWebHistory } from 'vue-router'
 // Lazy routes (nomi file come sono sul disco)
 const Home  = () => import('../views/Homeview.vue')
 const Login = () => import('../views/Loginview.vue')
+const Users = () => import('../views/Usersview.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', redirect: '/login' }, // avvio -> login
+    { path: '/', name: 'home', component: Home, meta: { requiresAuth: true } },
     { path: '/login', name: 'login', component: Login },
-    { path: '/app',   name: 'home',  component: Home, meta: { requiresAuth: true } },
-    { path: '/:pathMatch(.*)*', redirect: '/login' },
+    { path: '/utenti', name: 'utenti', component: Users, meta: { requiresAuth: true } }, // 👈
+    // opzionale: compat per vecchi link /users
+    { path: '/users', redirect: '/utenti' },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),
 })
