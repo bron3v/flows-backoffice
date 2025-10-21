@@ -168,6 +168,35 @@ function isSelf(u) {
   return false
 }
 
+// timer interno al componente
+let heartbeatTimer = null
+
+function startHeartbeat() {
+  stopHeartbeat()
+  heartbeatTimer = setInterval(() => {
+    fetch('/me/ping', { method: 'POST', credentials: 'include' })
+      .catch(() => {}) // ignora errori transitori
+  }, 10_000) // ogni 10s
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
+
+// avvia quando la view è montata, ferma quando esce
+onMounted(startHeartbeat)
+onBeforeUnmount(stopHeartbeat)
+
+// opzionale: ping immediato quando la tab torna visibile
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    fetch('/me/ping', { method: 'POST', credentials: 'include' }).catch(() => {})
+  }
+})  
+
+
+
 // filtro client-side
 const filteredTeam = computed(() => {
   const term = q.value.trim().toLowerCase()
@@ -385,7 +414,7 @@ async function removeUser(u) {
     alert(`Impossibile eliminare l’utente: ${e.message}`)
   }
 }
-</script>
+  </script>
 
 <style scoped>
 /* Layout base */

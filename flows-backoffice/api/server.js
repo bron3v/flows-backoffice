@@ -96,30 +96,22 @@ app.use(session({
 
 // ---------- Heartbeat lastSeen (max 1/min) ----------
 // ---------- Heartbeat lastSeen (aggiorna SUBITO al primo hit, poi max 1/min) ----------
+// Heartbeat: aggiorna lastSeenTs max 1 volta ogni 15s
 app.use((req, res, next) => {
-  try {
-    if (req.session?.userId && req.sessionID) {
-      const now  = Date.now()
-      const last = Number(req.session.lastSeenTs || 0)
+  if (!req.session) return next()
+  const now = Date.now()
+  const last = Number(req.session.lastSeenTs || 0)
 
-      const isFirstTouch = !req.session.lastSeenTs
-      const shouldUpdate = isFirstTouch || (now - last > 60_000)
-
-      if (shouldUpdate) {
-        req.session.lastSeenTs = String(now)
-        // best-effort: persisti anche nella tabella session (campo JSON sess)
-        pool.query(
-          `UPDATE public.session
-             SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
-                      to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
-           WHERE sid = $2`,
-          [now, req.sessionID]
-        ).catch(()=>{})
-      }
-    }
-  } catch {}
-  next()
+  // aggiorna solo se è passato un po' di tempo per non stressare il DB
+  if (now - last >= 15_000) {
+    req.session.lastSeenTs = now
+    // con connect-pg-simple basta toccare la sessione: il save persiste `sess`
+    req.session.save(() => next())
+  } else {
+    next()
+  }
 })
+
 
 
 // ---------- Log richieste (dev) ----------
@@ -250,19 +242,20 @@ adminApi.get('/users/me', (req, res) => {
 adminApi.get('/users', async (_req, res) => {
   try {
     const sql = `
-      SELECT
-        u.id,
-        u.username,
-        EXISTS (
-          SELECT 1
-          FROM public.session s
-          WHERE s.expire > NOW()
-            AND (s.sess->>'userId')::int = u.id
-            AND to_timestamp(COALESCE((s.sess->>'lastSeenTs')::bigint,0)/1000.0)
-                > NOW() - INTERVAL '1 seconds'
-        ) AS online
-      FROM public.users u
-      ORDER BY online DESC, username ASC
+          SELECT
+      u.id,
+      u.username,
+      EXISTS (
+        SELECT 1
+        FROM public.session s
+        WHERE s.expire > NOW()                              
+          AND (s.sess->>'userId')::int = u.id              
+          AND to_timestamp(
+                GREATEST(0, COALESCE((s.sess->>'lastSeenTs')::bigint, 0)) / 1000.0
+              ) > NOW() - INTERVAL '30 seconds'             
+      ) AS online
+    FROM public.users u
+    ORDER BY online DESC, username ASC;
     `
     const { rows } = await pool.query(sql)
     res.json({ ok: true, items: rows })
