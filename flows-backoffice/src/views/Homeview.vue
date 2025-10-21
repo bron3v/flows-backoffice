@@ -105,8 +105,9 @@
                   <td class="person">
                     <img :src="m.avatar || defaultAvatar" alt="" />
                     <div>
-                      <div class="name">{{ m.username || m.name }}</div>
-                      <div class="small muted">{{ m.username }}</div>
+                      <div class="name">{{ m.name }}</div>
+                      <div class="small muted">{{ m.email || m.username }}</div>
+
                     </div>
                   </td>
 
@@ -218,6 +219,36 @@ function loadPendingLocally() {
   } catch { return samplePending() }
 }
 
+async function loadPendingFromBackend() {
+  try {
+    const data = await api.approvalsList() // es: { ok:true, items:[...] } o { approvals:[...] }
+    const items = Array.isArray(data?.items) ? data.items
+               : Array.isArray(data?.approvals) ? data.approvals
+               : []
+    // normalizza struttura
+    return items.map(r => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54'
+    }))
+  } catch {
+    // se l’endpoint non esiste ancora o fallisce, usa il locale
+    return loadPendingLocally()
+  }
+}
+
+function mergePending(localList, serverList) {
+  // evita duplicati per id/email
+  const byKey = new Map()
+  ;[...serverList, ...localList].forEach(x => {
+    const key = x.id ?? x.email
+    if (!byKey.has(key)) byKey.set(key, x)
+  })
+  return [...byKey.values()]
+}
+
+
 // --- bootstrap pagina ---
 let intervalId = null
 
@@ -252,11 +283,13 @@ async function bootstrap() {
     return
   }
 
-  // 2) stats KPI (se fallisce, ricalcoliamo da team)
+  // 2) stats KPI
   await loadStats()
 
-  // 3) pending locale (mock FE)
-  pending.value = loadPendingLocally()
+  // 3) pending: usa backend se c'è, con fallback e merge col locale
+  const serverPending = await loadPendingFromBackend()
+  const localPending  = loadPendingLocally()
+  pending.value = mergePending(localPending, serverPending)
 
   // 4) team dal backend
   await loadTeam()
@@ -296,15 +329,21 @@ async function loadTeam() {
                  : []
 
     // mappo al formato usato dalle card
-    team.value = items.map(u => ({
-    id: u.id ?? null,
-    username: u.username,
-    name: u.username,
-    email: u.username,
-    active: !!u.online,     // <— SOLO questo
-    role: u.role || 'Member',
-    avatar: undefined
-  }))
+    team.value = items.map(u => {
+    const override = getNameOverride(u.email)
+    return {
+      id: u.id ?? null,
+      username: u.username ?? null,
+      // priorità: override FE → (eventuale) u.name → username → email local-part
+      name: override || u.name || u.username || (u.email && String(u.email).split('@')[0]) || 'Utente',
+      email: u.email || '',
+      active: !!(u.online ?? u.active),
+      role: u.role || 'Member',
+      avatar: u.avatar,
+    }
+  })
+
+
 
 
     // riallinea KPI ai dati correnti
@@ -335,6 +374,22 @@ function samplePending() {
   ]
 }
 
+function saveNameOverride(email, name) {
+  try {
+    const m = JSON.parse(localStorage.getItem('flows_name_overrides') || '{}')
+    m[email] = name
+    localStorage.setItem('flows_name_overrides', JSON.stringify(m))
+  } catch {}
+}
+
+function getNameOverride(email) {
+  try {
+    const m = JSON.parse(localStorage.getItem('flows_name_overrides') || '{}')
+    return m[email]
+  } catch { return undefined }
+}
+
+
 // --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
   try {
@@ -343,30 +398,29 @@ async function approve(u) {
       (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) ||
       ''
 
-    const payload = { name: u.name, email: u.email, username: suggestedUsername || undefined }
-    const res = await fetch('/admin/api/approvals/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload)
+    const res = await api.approvalsApprove({
+      id: u.id,
+      name: u.name,          // << tieni il nome della card
+      email: u.email,
+      username: suggestedUsername || undefined
     })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data?.ok) {
-      if (data?.message === 'user_exists') {
-        alert('Utente già presente. Rimuovo la richiesta.')
-        pending.value = pending.value.filter(x => x.id !== u.id)
-        return
-      }
-      throw new Error(data?.message || 'Errore approvazione')
-    }
+
+    if (!res?.ok) throw new Error(res?.message || 'Errore approvazione')
+
+    // 🔹 salva override locale: email -> nome richiesto
+    saveNameOverride(u.email, u.name)
+
     pending.value = pending.value.filter(x => x.id !== u.id)
-    alert(`Utente creato${u.email ? ' e email inviata a ' + u.email : ''}.`)
     await loadTeam()
+    kpi.value.usersOnline = team.value.filter(x => x.active).length
+    kpi.value.usersTotal  = team.value.length
   } catch (e) {
     console.error(e)
     alert('Impossibile approvare la richiesta. Riprova.')
   }
 }
+
+
 
 async function reject(u) {
   pending.value = pending.value.filter(x => x.id !== u.id)

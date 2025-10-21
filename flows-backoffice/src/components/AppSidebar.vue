@@ -137,35 +137,45 @@ async function submit () {
 
   loading.value = true
   try {
-    // ✅ crea/approva l'utente (il backend può anche inviare la mail qui dentro)
-    const res = await api.approveUser(payload)
-
+    const res = await api.requestApproval(payload)  // <-- tenta il backend
     ok.value = true
 
-    // aggiorna subito la lista "pending"/utenti in dashboard
-    const created = res?.user ?? {
-      id: Date.now(),
+    const created = {
+      id: res?.request?.id ?? Date.now(),
       name: payload.name,
       email: payload.email,
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
-
     setTimeout(closeModal, 700)
+
   } catch (e) {
-    // messaggi comuni: 409 (email già esistente), 422 (validazione), ecc.
-    const msg = e?.data?.message || e?.message || ''
-    if (e?.status === 409) {
-      error.value = 'Questa email esiste già'
-    } else if (e?.status === 422) {
-      error.value = msg || 'Dati non validi'
-    } else {
-      error.value = msg || 'Errore durante la creazione'
+    // 👉 FALLBACK: se l’endpoint non esiste ancora (404),
+    // crea il pending solo FE così puoi approvare dalla Home.
+    if (e?.status === 404) {
+      const created = {
+        id: Date.now(),
+        name: payload.name,
+        email: payload.email,
+        avatar: 'https://i.pravatar.cc/40?img=54'
+      }
+      window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
+      ok.value = true
+      setTimeout(closeModal, 700)
+      loading.value = false
+      return
     }
+
+    const msg = e?.data?.message || e?.message || ''
+    if (e?.status === 409)      error.value = 'Richiesta già presente per questa email'
+    else if (e?.status === 422) error.value = msg || 'Dati non validi'
+    else                        error.value = msg || 'Errore durante l’invio della richiesta'
   } finally {
     loading.value = false
   }
 }
+
+
 
 // Esc globale
 function onKey (e) {

@@ -1,6 +1,6 @@
 // src/utils/api.js
 import router from '@/router'
-import { markLoggedOut } from '@/router'   // ⬅️ importa gli helper del router
+import { markLoggedOut } from '@/router'   // ⬅️ helper del router
 
 export async function request(path, { method = 'GET', body, headers } = {}) {
   const opts = {
@@ -17,6 +17,7 @@ export async function request(path, { method = 'GET', body, headers } = {}) {
   const payload = ct.includes('application/json')
     ? await res.json().catch(() => ({}))
     : await res.text().catch(() => '');
+
   // --- Guardia universale 401 per /admin/api/* e co. ---
   if (res.status === 401) {
     // invalida lo stato locale
@@ -48,8 +49,9 @@ export async function request(path, { method = 'GET', body, headers } = {}) {
   return payload;
 }
 
-// --- API convenience (lascia invariato il resto) ---
+// --- API convenience ---
 export const api = {
+  // Auth
   async login(username, password) {
     try {
       return await request('/auth/login', {
@@ -63,12 +65,35 @@ export const api = {
       throw err;
     }
   },
-
   logout() { return request('/auth/logout', { method: 'POST' }); },
   me() { return request('/me'); },
+
+  // KPI / Utenti
   stats() { return request('/admin/api/stats'); },
   usersList() { return request('/admin/api/users'); },
-  deleteUser(id) { return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
-  approveUser(payload) { return request('/admin/api/approvals/approve', { method: 'POST', body: payload }); },
-    
+  deleteUser(id) {
+    return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  // 🔹 Flusso approvazioni (nuovo)
+  // 1) La sidebar crea SOLO la richiesta
+  requestApproval({ name, email, username }) {
+    return request('/admin/api/approvals/request', {
+      method: 'POST',
+      body: { name, email, username },
+    });
+  },
+
+  // 2) La Home carica la lista delle richieste pendenti
+  approvalsList() {
+    return request('/admin/api/approvals');
+  },
+
+  // 3) La Home approva (crea l’utente e rimuove la richiesta)
+  approvalsApprove({ id, name, email, username }) {
+    return request('/admin/api/approvals/approve', {
+      method: 'POST',
+      body: { id, name, email, username },
+    });
+  },
 };
