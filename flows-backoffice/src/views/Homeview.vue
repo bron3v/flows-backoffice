@@ -67,8 +67,9 @@
                 <li v-for="u in pending" :key="u.id" class="pending-item">
                   <img :src="u.avatar || defaultAvatar" alt="" />
                   <div class="meta">
-                    <strong>{{ u.name || (u.email && u.email.split('@')[0]) || 'Nuovo utente' }}</strong>
-                    <small>{{ u.email || '—' }}</small>
+                   <strong>{{ displayName(u) }}</strong>
+<small>{{ u.email || '—' }}</small>
+
                   </div>
                   <div class="actions">
                     <button class="ok" @click="approve(u)">✓</button>
@@ -390,28 +391,53 @@ function getNameOverride(email) {
 }
 
 
+// helper: username pulito a partire dal "Nome" (spazi -> punti)
+function makeUsernameFromName (s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')         // es: "A Maxia" -> "a.maxia"
+    .replace(/[^a-z0-9_.-]/g, '') // caratteri sicuri
+    .slice(0, 32)
+}
+
 // --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
   try {
-    const suggestedUsername =
+    // ✅ priorità: u.username (se già presente) -> derivato da u.name -> local-part email
+    const desiredUsername =
+      (u.username && String(u.username).trim()) ||
+      makeUsernameFromName(u.name) ||
       (u.email && String(u.email).split('@')[0]) ||
-      (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) ||
       ''
 
     const res = await api.approvalsApprove({
       id: u.id,
-      name: u.name,          // << tieni il nome della card
+      name: u.name,                 // mantiene il nome della card
       email: u.email,
-      username: suggestedUsername || undefined
+      username: desiredUsername || undefined
     })
 
     if (!res?.ok) throw new Error(res?.message || 'Errore approvazione')
 
-    // 🔹 salva override locale: email -> nome richiesto
-    saveNameOverride(u.email, u.name)
+    // 🔹 salva override locale: email -> username desiderato (NON il local-part)
+    saveNameOverride(u.email, desiredUsername)
 
+    // rimuovi dalla lista pending
     pending.value = pending.value.filter(x => x.id !== u.id)
+
+    // ricarica il team dal backend...
     await loadTeam()
+
+    // ...e forza comunque l'username in UI per coerenza immediata
+    const mail = String(u.email || '').toLowerCase()
+    team.value = team.value.map(m =>
+      String(m.email || '').toLowerCase() === mail
+        ? { ...m, username: desiredUsername }
+        : m
+    )
+
+    // KPI
     kpi.value.usersOnline = team.value.filter(x => x.active).length
     kpi.value.usersTotal  = team.value.length
   } catch (e) {
@@ -419,6 +445,7 @@ async function approve(u) {
     alert('Impossibile approvare la richiesta. Riprova.')
   }
 }
+
 
 
 
@@ -468,6 +495,34 @@ async function removeUser(u) {
     alert(`Impossibile eliminare l’utente: ${e.message}`)
   }
 }
+
+const PREFERRED_KEY = 'flows_preferred_names'
+function loadPreferredNames () {
+  try { return JSON.parse(localStorage.getItem(PREFERRED_KEY) || '{}') }
+  catch { return {} }
+}
+const preferredNames = ref(loadPreferredNames())
+
+function displayName(u) {
+  const mail = String(u?.email || '').toLowerCase()
+  const preferred = preferredNames.value[mail]
+  // priorità: preferito FE → username DB → name → local-part
+  return preferred || u?.username || u?.name || (mail && mail.split('@')[0]) || 'Nuovo utente'
+}
+
+// opzionale: utility per aggiornare e persistere quando approvi
+function setPreferred(email, username) {
+  const mail = String(email || '').toLowerCase()
+  preferredNames.value = { ...preferredNames.value, [mail]: username }
+  try { localStorage.setItem(PREFERRED_KEY, JSON.stringify(preferredNames.value)) } catch {}
+}
+
+// se ascolti l’evento del modal:
+window.addEventListener('flows:new-pending', (e) => {
+  const { email, username } = e.detail || {}
+  if (email && username) setPreferred(email, username)
+})
+
   </script>
 
 <style scoped>

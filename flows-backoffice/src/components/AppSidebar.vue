@@ -116,6 +116,20 @@ function makeUsername (fullName) {
     .slice(0, 32)                   // limiti ragionevoli
 }
 
+function emailLocalPart (s) {
+  return String(s || '').toLowerCase().split('@')[0] || ''
+}
+
+function savePreferredName(email, username) {
+  try {
+    const key = 'flows_preferred_names'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(email).toLowerCase()] = username
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
+
 async function submit () {
   error.value = ''
   ok.value = false
@@ -129,34 +143,43 @@ async function submit () {
     return
   }
 
+  // 👉 username DESIDERATO: derivato dal campo "Nome"
+  const desiredUsername = makeUsername(name.value)
+  savePreferredName(email.value, desiredUsername)
+
   const payload = {
     name: name.value.trim(),
     email: email.value.trim().toLowerCase(),
-    username: makeUsername(name.value)
+    username: desiredUsername           // <— passa SEMPRE l’username
   }
 
   loading.value = true
   try {
-    const res = await api.requestApproval(payload)  // <-- tenta il backend
+    const res = await api.requestApproval(payload)
+
     ok.value = true
 
+    // Oggetto "pending" per la Home: include username e display_name
     const created = {
       id: res?.request?.id ?? Date.now(),
       name: payload.name,
       email: payload.email,
+      username: desiredUsername,
+      display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
     setTimeout(closeModal, 700)
 
   } catch (e) {
-    // 👉 FALLBACK: se l’endpoint non esiste ancora (404),
-    // crea il pending solo FE così puoi approvare dalla Home.
+    // 👉 FALLBACK: se l’endpoint non esiste ancora (404), crea il pending solo FE
     if (e?.status === 404) {
       const created = {
         id: Date.now(),
         name: payload.name,
         email: payload.email,
+        username: desiredUsername,
+        display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
         avatar: 'https://i.pravatar.cc/40?img=54'
       }
       window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
@@ -174,8 +197,6 @@ async function submit () {
     loading.value = false
   }
 }
-
-
 
 // Esc globale
 function onKey (e) {
