@@ -259,7 +259,7 @@ adminApi.get('/users', async (_req, res) => {
           WHERE s.expire > NOW()
             AND (s.sess->>'userId')::int = u.id
             AND to_timestamp(COALESCE((s.sess->>'lastSeenTs')::bigint,0)/1000.0)
-                > NOW() - INTERVAL '1 minutes'
+                > NOW() - INTERVAL '1 seconds'
         ) AS online
       FROM public.users u
       ORDER BY online DESC, username ASC
