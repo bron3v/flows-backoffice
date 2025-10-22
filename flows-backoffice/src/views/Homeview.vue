@@ -814,7 +814,7 @@ window.addEventListener('flows:new-pending', (e) => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-.card-head h3 { margin: 0; font-size: 1rem; }
+.card-head h3 { margin: 0; font-size: 1rem; color: #6b7280;}
 .muted { color: #6b7280; }
 
 .table { width: 100%; border-collapse: separate; border-spacing: 0; }
@@ -855,7 +855,35 @@ window.addEventListener('flows:new-pending', (e) => {
 .badge.success { background: #ecfdf5; color: #16a34a; }
 .badge.danger  { background: #fef2f2; color: #ef4444; }
 
-.badge-role {
+/* Riga grid: avatar | meta | centro | azioni */
+/* Riga: avatar | meta | azioni ; il badge sarà assoluto, quindi non serve una colonna dedicata */
+.pending-item{
+  position: relative;                 /* 👈 necessaria per l'assoluto del badge */
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Azioni allineate a destra */
+.pending-item .actions{
+  justify-self: end;
+  display: flex;
+  gap: 8px;
+}
+
+/* Contenitore del badge assoluto, al centro geometrico della riga */
+.pending-item .role-center{
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);   /* 👈 centro perfetto orizz+vert */
+  pointer-events: none;               /* evita di "coprire" i bottoni */
+  z-index: 1;                         /* sopra il contenuto, ma non cliccabile */
+}
+
+/* Stile badge (il tuo) */
+.badge-role{
   display: inline-block;
   padding: 4px 10px;
   border-radius: 9999px;
@@ -864,10 +892,11 @@ window.addEventListener('flows:new-pending', (e) => {
   font-weight: 600;
   font-size: 12px;
   line-height: 1;
-  white-space: nowrap;        
-  min-width: 72px;            
+  white-space: nowrap;
+  min-width: 72px;
   text-align: center;
 }
+
 
 .icon-btn {
   border: none;
