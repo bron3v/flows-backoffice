@@ -40,7 +40,7 @@ module.exports = { pool }
 // ---------- Helper DB ----------
 async function findUserByUsername (username) {
   const sql = `
-    SELECT id, username, password_hash
+    SELECT id, username, password_hash, role
     FROM public.users
     WHERE lower(username) = lower($1)
     LIMIT 1
@@ -127,43 +127,42 @@ app.post('/auth/login', async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ ok: false, message: 'missing_fields' })
     }
+
     const user = await findUserByUsername(username)
     const ok = user && await checkPassword(user, password)
-    if (!ok) return res.status(401).json({ ok: false, message: 'invalid_credentials' })
+    if (!ok) return res.status(200).json({ ok: false, message: 'invalid_credentials' })
 
+    // sessione completa di ruolo
     req.session.loggedIn = true
-    req.session.user = { id: user.id, username: user.username }
-    req.session.userId = user.id
-    // ... dopo aver validato username/password ...
-    req.session.loggedIn = true
-    req.session.user     = { id: user.id, username: user.username }
     req.session.userId   = user.id
+    req.session.user     = { id: user.id, username: user.username, role: user.role }
 
-    // Scrivi lastSeen SUBITO al login (salva la sessione su DB, poi aggiorna il JSON)
+    // best-effort lastSeen (lascia com’è il tuo codice, non influisce sul ruolo)
     const now = Date.now()
     req.session.lastSeenTs = String(now)
     req.session.save(err => {
       if (!err) {
-        // best-effort: aggiorna il campo JSON 'lastSeen' nel record della sessione
         pool.query(
           `UPDATE public.session
-            SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
+             SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
                       to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
-          WHERE sid = $2`,
+           WHERE sid = $2`,
           [now, req.sessionID]
         ).catch(()=>{})
       }
     })
 
-    // rispondi al client
-    return res.json({ ok: true, user: req.session.user })
-
-    return res.json({ ok: true, user: req.session.user })
+    // >>> QUI: ritorna anche role
+    return res.json({
+      ok: true,
+      user: { id: user.id, username: user.username, role: user.role }
+    })
   } catch (err) {
     console.error('[/auth/login] error:', err)
     return res.status(500).json({ ok: false, message: 'server_error' })
   }
 })
+
 
 app.post('/auth/logout', (req, res) => {
   req.session?.destroy(err => {
@@ -183,18 +182,29 @@ app.get('/auth/ping', (req, res) => {
   })
 })
 
-app.get('/me', (req, res) => {
-  if (!req.session?.loggedIn || !req.session?.user) {
+app.get('/me', async (req, res) => {
+  if (!req.session?.loggedIn || !req.session?.userId) {
     return res.status(401).json({ ok: false })
   }
-  res.json({ ok: true, user: req.session.user })
+  const { rows } = await pool.query(
+    'SELECT id, username, role FROM public.users WHERE id = $1',
+    [req.session.userId]
+  )
+  const u = rows[0]
+  if (!u) return res.status(401).json({ ok: false })
+  // sincronizza anche la sessione se mancava il role
+  req.session.user = { id: u.id, username: u.username, role: u.role }
+  return res.json({ ok: true, user: u })
 })
+
 
 // ---------- Guard ----------
 function requireLogin (req, res, next) {
   if (req.session?.loggedIn) return next()
   return res.status(401).json({ ok: false, message: 'not_logged_in' })
 }
+
+
 
 // ---------- Router admin protetto ----------
 const adminApi = express.Router()

@@ -38,26 +38,39 @@ async function meWithTimeout(ms = 2500) {
 }
 
 // Guardie
-router.beforeEach((to, from, next) => {
-  const logged = sessionStorage.getItem('flows_logged') === '1';
+// helper mini-cache
+const AUTH_CACHE_KEY = 'flows_logged'
+function isLogged() {
+  try { return sessionStorage.getItem(AUTH_CACHE_KEY) === '1' } catch { return false }
+}
+function getRole() {
+  try { return (sessionStorage.getItem('flows_role') || '').toLowerCase() } catch { return '' }
+}
+const ALLOWED = new Set(['admin','user_manager','logs_manager'])
 
-  // 1) Rotte protette: obbliga al login se non loggato
-  if (to.meta?.requiresAuth && !logged) {
-    const redirect = encodeURIComponent(to.fullPath || '/');
-    return next(`/login?redirect=${redirect}`);
-  }
+router.beforeEach(async (to, from, next) => {
+  const logged = isLogged()
+  const role = getRole()
 
-  // 2) Se sei già loggato e provi ad andare su /login:
-  if (to.path.startsWith('/login') && logged) {
-    // se arrivavi da una pagina protetta (es. /app, /, ecc.) resta lì
-    if (from?.matched?.some(r => r.meta?.requiresAuth)) {
-      return next(false); // ❗ annulla la navigazione: rimani dove sei
+  // Rotte protette
+  if (to.meta?.requiresAuth) {
+    if (!logged) {
+      const redirect = encodeURIComponent(to.fullPath || '/')
+      return next(`/login?redirect=${redirect}`)
     }
-    // altrimenti manda alla home/app
-    return next('/app'); // se non hai /app, usa '/'
+    if (!ALLOWED.has(role)) {
+      // ruolo non sufficiente → torna al login con messaggio
+      return next({ path: '/login', query: { denied: 'role' } })
+    }
   }
 
-  return next();
-});
+  // Se già loggato e provi ad andare su /login, resta in app
+  if (to.path.startsWith('/login') && logged && ALLOWED.has(role)) {
+    return next('/app')
+  }
+
+  return next()
+})
+
 
 export default router;

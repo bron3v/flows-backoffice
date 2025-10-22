@@ -74,16 +74,35 @@ async function doLogin() {
     return
   }
 
+  // reset eventuale ruolo vecchio
+  try { sessionStorage.removeItem('flows_role') } catch {}
+
   loading.value = true
   try {
+    // 1) login
     const res = await api.login(user, pass) // POST /auth/login
-    const ok = res?.ok === true && !!res?.user
-    if (!ok) {
+    if (!(res?.ok)) {
       error.value = 'Credenziali errate'
       return
     }
+
+    // 2) leggi ruolo SOLAMENTE da /me (fonte autoritativa)
+    let me
+    try { me = await api.me() } catch {}
+    const role = String(
+      me?.role ?? me?.user?.role ?? res?.user?.role ?? ''
+    ).toLowerCase()
+
+    // 3) blocca ruolo "user" o ruolo mancante
+    if (!role || role === 'user') {
+      error.value = 'Accesso negato: il tuo ruolo non consente l’accesso al backoffice. Contatta un amministratore.'
+      try { await api.logout?.() } catch {}
+      return
+    }
+
+    // 4) ok: salva stato e vai
     markLoggedIn()
-    try { await api.me() } catch {}
+    try { sessionStorage.setItem('flows_role', role) } catch {}
     router.replace(sanitizeRedirect(route.query.redirect))
   } catch {
     error.value = 'Errore di connessione'
@@ -91,6 +110,8 @@ async function doLogin() {
     loading.value = false
   }
 }
+
+
 </script>
 
 

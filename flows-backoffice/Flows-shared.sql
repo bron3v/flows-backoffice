@@ -2,12 +2,12 @@
 -- PostgreSQL database dump
 --
 
-\restrict j3GffibhflqQqUklIRp6tgodMAQKkAtgdQeHnbLAq3pCjmYfhSq5Pagd1h7P9Ba
 
 -- Dumped from database version 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)
 
 -- Started on 2025-10-15 14:15:10 CEST
+ROLLBACK;
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -46,7 +46,7 @@ SET default_table_access_method = heap;
 -- Name: registration_requests; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.registration_requests (
+CREATE TABLE IF NOT EXISTS public.registration_requests (
     id integer NOT NULL,
     email text NOT NULL,
     affiliation text NOT NULL,
@@ -65,7 +65,7 @@ ALTER TABLE public.registration_requests OWNER TO postgres;
 -- Name: registration_requests_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.registration_requests_id_seq
+CREATE SEQUENCE IF NOT EXISTS public.registration_requests_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -90,7 +90,7 @@ ALTER SEQUENCE public.registration_requests_id_seq OWNED BY public.registration_
 -- Name: session; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.session (
+CREATE TABLE IF NOT EXISTS public.session (
     sid character varying NOT NULL,
     sess json NOT NULL,
     expire timestamp(6) without time zone NOT NULL
@@ -104,7 +104,7 @@ ALTER TABLE public.session OWNER TO postgres;
 -- Name: users; Type: TABLE; Schema: public; Owner: postgres
 --
 
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
     id integer NOT NULL,
     username text NOT NULL,
     password_hash text NOT NULL
@@ -118,7 +118,7 @@ ALTER TABLE public.users OWNER TO postgres;
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.users_id_seq
+CREATE SEQUENCE IF NOT EXISTS public.users_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -160,8 +160,6 @@ ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_
 -- Data for Name: registration_requests; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.registration_requests (id, email, affiliation, note, status, requester_ip, user_agent, created_at) FROM stdin;
-\.
 
 
 --
@@ -170,12 +168,14 @@ COPY public.registration_requests (id, email, affiliation, note, status, request
 -- Data for Name: session; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.session (sid, sess, expire) FROM stdin;
-RFoEBJhGaFJIlv8tPweXQof0S__hRR8i	{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-03T14:50:26.082Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":2}	2025-10-15 21:40:41
-W5H_pRJxfjeGf7kqOMw_Coh9Kx9_KWNr	{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-16T07:25:21.715Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}	2025-10-16 09:25:22
-a9x6DjTTKcF1PygibTk5pIYVJtAO3tHy	{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-27T22:06:05.475Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":2}	2025-10-29 13:10:30
-4_EGI_7eSQ4ZjgSJwyfxsc-_e6Bls283	{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-27T12:44:36.682Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}	2025-10-28 09:25:49
-\.
+TRUNCATE TABLE public.session;
+
+INSERT INTO public.session (sid, sess, expire) VALUES
+('RFoEBJhGaFJIlv8tPweXQof0S__hRR8i','{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-03T14:50:26.082Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":2}','2025-10-15 21:40:41'),
+('W5H_pRJxfjeGf7kqOMw_Coh9Kx9_KWNr','{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-16T07:25:21.715Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}','2025-10-16 09:25:22'),
+('a9x6DjTTKcF1PygibTk5pIYVJtAO3tHy','{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-27T22:06:05.475Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":2}','2025-10-29 13:10:30'),
+('4_EGI_7eSQ4ZjgSJwyfxsc-_e6Bls283','{"cookie":{"originalMaxAge":1209600000,"expires":"2025-10-27T12:44:36.682Z","secure":false,"httpOnly":true,"path":"/","sameSite":"lax"},"userId":1}','2025-10-28 09:25:49');
+
 
 
 --
@@ -184,10 +184,15 @@ a9x6DjTTKcF1PygibTk5pIYVJtAO3tHy	{"cookie":{"originalMaxAge":1209600000,"expires
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY public.users (id, username, password_hash) FROM stdin;
-1	f.pili	$2a$06$JgCN5pOMMMLJy3ZxEjz6/OZWxd/VUPx9EL0dCruZPcKWfGoEo//GG
-2	a.coppola	$2a$06$V9ZHs8cL83qz8kZwdgk0QuG/2HkzQ/vaFxIazmur8ZE0L7SPM9ya.
-\.
+
+BEGIN;
+TRUNCATE TABLE public.users RESTART IDENTITY;  -- azzera righe e sequenza
+INSERT INTO public.users (username, password_hash) VALUES
+  ('f.pili',    '$2a$06$JgCN5pOMMMLJy3ZxEjz6/OZWxd/VUPx9EL0dCruZPcKWfGoEo//GG'),
+  ('a.coppola', '$2a$06$V9ZHs8cL83qz8kZwdgk0QuG/2HkzQ/vaFxIazmur8ZE0L7SPM9ya.');
+COMMIT;
+
+
 
 
 --
@@ -213,8 +218,8 @@ SELECT pg_catalog.setval('public.users_id_seq', 2, true);
 -- Name: registration_requests registration_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.registration_requests
-    ADD CONSTRAINT registration_requests_pkey PRIMARY KEY (id);
+--ALTER TABLE ONLY public.registration_requests
+--    ADD CONSTRAINT registration_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -222,8 +227,8 @@ ALTER TABLE ONLY public.registration_requests
 -- Name: session session_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.session
-    ADD CONSTRAINT session_pkey PRIMARY KEY (sid);
+--ALTER TABLE ONLY public.session
+--    ADD CONSTRAINT session_pkey PRIMARY KEY (sid);
 
 
 --
@@ -231,8 +236,8 @@ ALTER TABLE ONLY public.session
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+--ALTER TABLE ONLY public.users
+--    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
 
 --
@@ -240,8 +245,8 @@ ALTER TABLE ONLY public.users
 -- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_username_key UNIQUE (username);
+--ALTER TABLE ONLY public.users
+--    ADD CONSTRAINT users_username_key UNIQUE (username);
 
 
 --
@@ -249,7 +254,7 @@ ALTER TABLE ONLY public.users
 -- Name: IDX_session_expire; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);
+CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON public.session USING btree (expire);
 
 
 --
@@ -257,7 +262,7 @@ CREATE INDEX "IDX_session_expire" ON public.session USING btree (expire);
 -- Name: ux_registration_requests_email_pending; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE UNIQUE INDEX ux_registration_requests_email_pending ON public.registration_requests USING btree (lower(email)) WHERE (status = 'pending'::text);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_registration_requests_email_pending ON public.registration_requests USING btree (lower(email)) WHERE (status = 'pending'::text);
 
 
 -- Completed on 2025-10-15 14:15:10 CEST
@@ -266,5 +271,39 @@ CREATE UNIQUE INDEX ux_registration_requests_email_pending ON public.registratio
 -- PostgreSQL database dump complete
 --
 
-\unrestrict j3GffibhflqQqUklIRp6tgodMAQKkAtgdQeHnbLAq3pCjmYfhSq5Pagd1h7P9Ba
+BEGIN;
+
+-- 0) Crea l'ENUM se manca
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+    CREATE TYPE public.user_role AS ENUM ('admin','user','user_manager','logs_manager');
+  END IF;
+END
+$$;
+
+-- 1) Aggiungi la colonna se manca
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS role public.user_role;
+
+-- 2) Imposta il DEFAULT = 'user' (serve anche per i nuovi insert)
+ALTER TABLE public.users
+  ALTER COLUMN role SET DEFAULT 'user';
+
+-- 3) Backfill: riempi le righe già esistenti che sono NULL
+UPDATE public.users
+SET role = 'user'
+WHERE role IS NULL;
+
+-- 4) Ora puoi imporre il NOT NULL senza errori
+ALTER TABLE public.users
+  ALTER COLUMN role SET NOT NULL;
+
+COMMIT;
+
+UPDATE public.users
+SET role = 'admin'::public.user_role
+WHERE lower(username) = 'f.pili'
+RETURNING id, username, role;
+
 
