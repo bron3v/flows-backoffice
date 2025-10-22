@@ -253,36 +253,35 @@ function normalizePendingList(list) {
 
 
 
-async function loadPendingFromBackend() {
+function preferredNameFor(email) {
   try {
-    const data = await api.approvalsList();
-    const items = Array.isArray(data?.items) ? data.items
-               : Array.isArray(data?.approvals) ? data.approvals
-               : [];
-
-    return items.map(r => {
-      const raw =
-        r.role ??
-        r.requested_role ??
-        r.requestedRole ??
-        r.desired_role ??
-        r.desiredRole ??
-        null;
-
-      const role = String(raw || 'user').toLowerCase();
-      return {
-        id: r.id,
-        name: r.name,
-        email: r.email,
-        avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
-        role,
-        roleLabel: prettyRole(role),
-      };
-    });
-  } catch {
-    return loadPendingLocally();
-  }
+    const key = 'flows_preferred_names'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    return map[String(email || '').toLowerCase()] || ''
+  } catch { return '' }
 }
+
+async function loadPendingFromBackend() {
+  const data = await api.approvalsList().catch(() => ({}))
+  const items = Array.isArray(data?.items) ? data.items
+              : Array.isArray(data?.approvals) ? data.approvals
+              : []
+  return items.map(r => {
+    const pref = preferredNameFor(r.email)
+    const display = pref || r.display_name || r.name
+    return {
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      username: r.username,
+      requested_role: r.requested_role || r.role || 'user',
+      roleLabel: prettyRole(r.requested_role || r.role || 'user'),
+      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
+      display_name: display || (r.email ? String(r.email).split('@')[0] : 'Nuovo utente')
+    }
+  })
+}
+
 
 
 function mergePending(localList, serverList) {
@@ -454,33 +453,63 @@ function makeUsernameFromName (s) {
 
 // --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
-  try {
-    const suggestedUsername =
-      (u.email && String(u.email).split('@')[0]) ||
-      (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) || '';
+  // --- helpers locali sicuri ---
+  const emailLocalPart = s => String(s || '').toLowerCase().split('@')[0] || '';
+  const preferredNameFor = (email) => {
+    try {
+      const map = JSON.parse(localStorage.getItem('flows_preferred_names') || '{}');
+      return map[String(email || '').toLowerCase()] || '';
+    } catch { return ''; }
+  };
+  const makeUsername = (fullName) =>
+    String(fullName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '.')           // spazi -> punti
+      .replace(/[^a-z0-9_.-]/g, '')   // solo caratteri sicuri
+      .slice(0, 32);
 
+  try {
+    // 1) Scegliamo il display name con priorità: override locale > u.display_name > u.name > local-part email
+    const display = preferredNameFor(u.email) || u.display_name || u.name || emailLocalPart(u.email);
+
+    // 2) Username tecnico derivato dal display name (niente email tagliata)
+    const suggestedUsername = makeUsername(display);
+
+    // 3) Ruolo: preferisci quello richiesto nella card, poi eventuale role già presente
+    const roleToApply = u.requested_role || u.role || 'user';
+
+    // 4) Chiamata BE: inviamo name = display per fissare il nome scelto
     await api.approvalsApprove({
       id: u.id,
-      name: u.name,
+      name: display,
       email: u.email,
       username: suggestedUsername || undefined,
-      role: u.role, 
+      role: roleToApply,
     });
 
-    // rimuovi dalla lista
+    // 5) Rimuovi dalla lista pending
     pending.value = pending.value.filter(x => x.id !== u.id);
 
-    // PULISCI override locale, non serve più
-    clearRoleOverride(u.email);
+    // 6) Pulisci SOLO l'override del ruolo; manteniamo il nome preferito
+    try {
+      const key = 'flows_preferred_roles';
+      const map = JSON.parse(localStorage.getItem(key) || '{}');
+      delete map[String(u.email || '').toLowerCase()];
+      localStorage.setItem(key, JSON.stringify(map));
+    } catch {}
 
+    // 7) Ricarica team e KPI
     await loadTeam();
     kpi.value.usersOnline = team.value.filter(x => x.active).length;
     kpi.value.usersTotal  = team.value.length;
+
   } catch (e) {
     console.error(e);
     alert('Impossibile approvare la richiesta. Riprova.');
   }
 }
+
 
 // --- overrides ruolo: email -> role ---
 const ROLE_OVR_KEY = 'flows_role_overrides_v1';
@@ -565,11 +594,11 @@ function loadPreferredNames () {
 const preferredNames = ref(loadPreferredNames())
 
 function displayName(u) {
-  const mail = String(u?.email || '').toLowerCase()
-  const preferred = preferredNames.value[mail]
-  // priorità: preferito FE → username DB → name → local-part
-  return preferred || u?.username || u?.name || (mail && mail.split('@')[0]) || 'Nuovo utente'
+  // priorità: display_name > name > override locale > fallback email local-part
+  const override = preferredNameFor(u?.email)
+  return u?.display_name || u?.name || override || (u?.email?.split?.('@')[0]) || 'Nuovo utente'
 }
+
 
 // opzionale: utility per aggiornare e persistere quando approvi
 function setPreferred(email, username) {
@@ -877,7 +906,7 @@ window.addEventListener('flows:new-pending', (e) => {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);   /* 👈 centro perfetto orizz+vert */
+  transform: translate(-50%, -50%);   
   pointer-events: none;               /* evita di "coprire" i bottoni */
   z-index: 1;                         /* sopra il contenuto, ma non cliccabile */
 }

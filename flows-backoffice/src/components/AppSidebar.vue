@@ -90,12 +90,12 @@ import { api } from '@/utils/api'
 const show = ref(false)
 const name = ref('')
 const email = ref('')
+const role = ref('user')
 const loading = ref(false)
 const error = ref('')
 const ok = ref(false)
-const role = ref('user')
-const ALLOWED_ROLES = new Set(['user','user_manager','logs_manager','admin'])
 
+const ALLOWED_ROLES = new Set(['user','user_manager','logs_manager','admin'])
 
 function openModal () {
   error.value = ''
@@ -118,44 +118,37 @@ function closeModal () {
   resetState()
 }
 
-
-
 function isEmail (s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
 }
 
-// username "pulito" derivato dal nome (senza usare l'email)
+// username tecnico proposto dal nome (non usiamo la mail)
 function makeUsername (fullName) {
   return String(fullName || '')
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, '.')           // spazi -> punti
-    .replace(/[^a-z0-9_.-]/g, '')   // solo caratteri sicuri
-    .slice(0, 32)                   // limiti ragionevoli
+    .replace(/\s+/g, '.')         // spazi -> punti
+    .replace(/[^a-z0-9_.-]/g, '') // solo caratteri sicuri
+    .slice(0, 32)
 }
 
-function emailLocalPart (s) {
-  return String(s || '').toLowerCase().split('@')[0] || ''
-}
-
-function savePreferredName(email, username) {
+function savePreferredName(emailAddr, displayName) {
   try {
     const key = 'flows_preferred_names'
     const map = JSON.parse(localStorage.getItem(key) || '{}')
-    map[String(email).toLowerCase()] = username
+    map[String(emailAddr || '').toLowerCase()] = String(displayName || '').trim()
     localStorage.setItem(key, JSON.stringify(map))
   } catch {}
 }
 
-function savePreferredRole(email, wantedRole) {
+function savePreferredRole(emailAddr, wantedRole) {
   try {
     const key = 'flows_preferred_roles'
     const map = JSON.parse(localStorage.getItem(key) || '{}')
-    map[String(email).toLowerCase()] = wantedRole
+    map[String(emailAddr || '').toLowerCase()] = wantedRole
     localStorage.setItem(key, JSON.stringify(map))
   } catch {}
 }
-
 
 async function submit () {
   error.value = ''
@@ -174,46 +167,51 @@ async function submit () {
     return
   }
 
-  const desiredUsername = makeUsername(name.value)
-  savePreferredName(email.value, desiredUsername)
-  savePreferredRole(email.value, role.value)   
+  const desiredDisplayName = name.value.trim()
+  const normalizedEmail = email.value.trim().toLowerCase()
+  const suggestedUsername = makeUsername(desiredDisplayName)
+
+  // salva preferenze locali (usate dal rendering della lista pending)
+  savePreferredName(normalizedEmail, desiredDisplayName)
+  savePreferredRole(normalizedEmail, role.value)
 
   const payload = {
-    name: name.value.trim(),
-    email: email.value.trim().toLowerCase(),
-    username: desiredUsername,
-    requested_role: role.value                 
+    name: desiredDisplayName,
+    email: normalizedEmail,
+    username: suggestedUsername,      // facoltativo lato BE
+    requested_role: role.value
   }
 
   loading.value = true
   try {
+    // prova invio al backend
     const res = await api.requestApproval(payload)
-    saveRoleOverride(email, selectedRole);
-    
-    ok.value = true
 
+    // normalizza l'oggetto creato per l'evento locale
     const created = {
       id: res?.request?.id ?? Date.now(),
       name: payload.name,
       email: payload.email,
-      username: desiredUsername,
-      requested_role: role.value,             
-      display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
+      username: payload.username,
+      requested_role: role.value,
+      display_name: desiredDisplayName,     // 👈 sempre il nome scelto
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
+
+    ok.value = true
     setTimeout(closeModal, 700)
 
   } catch (e) {
+    // fallback FE-only se l'endpoint non esiste ancora
     if (e?.status === 404) {
-      // fallback FE-only
       const created = {
         id: Date.now(),
         name: payload.name,
         email: payload.email,
-        username: desiredUsername,
-        requested_role: role.value,            
-        display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
+        username: payload.username,
+        requested_role: role.value,
+        display_name: desiredDisplayName,   // 👈 sempre il nome scelto
         avatar: 'https://i.pravatar.cc/40?img=54'
       }
       window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
@@ -222,6 +220,7 @@ async function submit () {
       loading.value = false
       return
     }
+
     const msg = e?.data?.message || e?.message || ''
     if (e?.status === 409)      error.value = 'Richiesta già presente per questa email'
     else if (e?.status === 422) error.value = msg || 'Dati non validi'
@@ -231,14 +230,14 @@ async function submit () {
   }
 }
 
-
-// Esc globale
+// ESC globale per chiudere la modale
 function onKey (e) {
   if (e.key === 'Escape' && show.value) closeModal()
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
+
 
 
 
