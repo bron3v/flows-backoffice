@@ -76,13 +76,13 @@ export const api = {
   },
 
   // 🔹 Flusso approvazioni (nuovo)
-  // 1) La sidebar crea SOLO la richiesta
-  requestApproval({ name, email, username }) {
-    return request('/admin/api/approvals/request', {
-      method: 'POST',
-      body: { name, email, username },
-    });
-  },
+requestApproval({ name, email, username, role, requested_role }) {
+  const r = role ?? requested_role;
+  return request('/admin/api/approvals/request', {
+    method: 'POST',
+    body: { name, email, username, role: r, requested_role: r }, // <-- invia entrambi per compatibilità
+  });
+},
 
   // 2) La Home carica la lista delle richieste pendenti
   approvalsList() {
@@ -90,10 +90,10 @@ export const api = {
   },
 
   // 3) La Home approva (crea l’utente e rimuove la richiesta)
-  approvalsApprove({ id, name, email, username }) {
-    return request('/admin/api/approvals/approve', {
-      method: 'POST',
-      body: { id, name, email, username },
-    });
-  },
-};
+approvalsApprove({ id, name, email, username, role, requested_role }) {
+  const r = role ?? requested_role;
+  return request('/admin/api/approvals/approve', {
+    method: 'POST',
+    body: { id, name, email, username, role: r, requested_role: r }, // <-- passa anche qui
+  });
+}};

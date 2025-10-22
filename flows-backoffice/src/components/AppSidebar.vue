@@ -188,7 +188,8 @@ async function submit () {
   loading.value = true
   try {
     const res = await api.requestApproval(payload)
-
+    saveRoleOverride(email, selectedRole);
+    
     ok.value = true
 
     const created = {

@@ -81,7 +81,6 @@
                     <button class="ko" @click="reject(u)">✕</button>
                   </div>
                 </li>
-
               </ul>
             </div>
             <div v-else class="empty">Nessuna richiesta in sospeso.</div>
@@ -122,7 +121,7 @@
                     <span class="badge danger"  v-else>Offline</span>
                   </td>
 
-                  <td class="role">{{ m.role }}</td>
+                  <td class="role">{{ prettyRole(m.role) }}</td>
 
                   <td class="t-right">
                     <div class="actions">
@@ -227,14 +226,14 @@ function loadPendingLocally() {
 }
 
 
-function prettyRole(r) {
-  const m = {
+function prettyRole(role) {
+  const k = String(role || '').toLowerCase();
+  return ({
     admin: 'Admin',
-    user: 'User',
     user_manager: 'User Manager',
-    logs_manager: 'Logs Manager'
-  }
-  return m[(r || '').toLowerCase()] || 'User'
+    logs_manager: 'Logs Manager',
+    user: 'User',
+  })[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'User');
 }
 
 function displayRole(u) {
@@ -244,10 +243,11 @@ function displayRole(u) {
 
 function normalizePendingList(list) {
   return (list || []).map(p => {
-    const role = p.role || 'user'
-    const roleLabel = p.roleLabel || prettyRole(role)
-    return { ...p, role, roleLabel }
-  })
+    const raw = p.role ?? p.requested_role ?? p.requestedRole ?? null;
+    const role = String(raw || 'user').toLowerCase();
+    const roleLabel = p.roleLabel || prettyRole(role);
+    return { ...p, role, roleLabel };
+  });
 }
 
 
@@ -255,24 +255,35 @@ function normalizePendingList(list) {
 
 async function loadPendingFromBackend() {
   try {
-    const data = await api.approvalsList() // es: { ok:true, items:[...] } o { approvals:[...] }
+    const data = await api.approvalsList();
     const items = Array.isArray(data?.items) ? data.items
                : Array.isArray(data?.approvals) ? data.approvals
-               : []
-    // normalizza struttura
-    return items.map(r => ({
-      id: r.id,
-      name: r.name,
-      email: r.email,
-      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
-      role: r.role || 'user',
-      roleLabel: prettyRole(r.role || 'user')
-    }))
+               : [];
+
+    return items.map(r => {
+      const raw =
+        r.role ??
+        r.requested_role ??
+        r.requestedRole ??
+        r.desired_role ??
+        r.desiredRole ??
+        null;
+
+      const role = String(raw || 'user').toLowerCase();
+      return {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
+        role,
+        roleLabel: prettyRole(role),
+      };
+    });
   } catch {
-    // se l’endpoint non esiste ancora o fallisce, usa il locale
-    return loadPendingLocally()
+    return loadPendingLocally();
   }
 }
+
 
 function mergePending(localList, serverList) {
   // evita duplicati per id/email
@@ -444,47 +455,57 @@ function makeUsernameFromName (s) {
 // --- approvazioni: chiama backend e aggiorna lista locale ---
 async function approve(u) {
   try {
-    // ✅ priorità: u.username (se già presente) -> derivato da u.name -> local-part email
-    const desiredUsername =
-      (u.username && String(u.username).trim()) ||
-      makeUsernameFromName(u.name) ||
+    const suggestedUsername =
       (u.email && String(u.email).split('@')[0]) ||
-      ''
+      (u.name && String(u.name).toLowerCase().replace(/\s+/g,'_')) || '';
 
-    const res = await api.approvalsApprove({
+    await api.approvalsApprove({
       id: u.id,
-      name: u.name,                 // mantiene il nome della card
+      name: u.name,
       email: u.email,
-      username: desiredUsername || undefined
-    })
+      username: suggestedUsername || undefined,
+      role: u.role, 
+    });
 
-    if (!res?.ok) throw new Error(res?.message || 'Errore approvazione')
+    // rimuovi dalla lista
+    pending.value = pending.value.filter(x => x.id !== u.id);
 
-    // 🔹 salva override locale: email -> username desiderato (NON il local-part)
-    saveNameOverride(u.email, desiredUsername)
+    // PULISCI override locale, non serve più
+    clearRoleOverride(u.email);
 
-    // rimuovi dalla lista pending
-    pending.value = pending.value.filter(x => x.id !== u.id)
-
-    // ricarica il team dal backend...
-    await loadTeam()
-
-    // ...e forza comunque l'username in UI per coerenza immediata
-    const mail = String(u.email || '').toLowerCase()
-    team.value = team.value.map(m =>
-      String(m.email || '').toLowerCase() === mail
-        ? { ...m, username: desiredUsername }
-        : m
-    )
-
-    // KPI
-    kpi.value.usersOnline = team.value.filter(x => x.active).length
-    kpi.value.usersTotal  = team.value.length
+    await loadTeam();
+    kpi.value.usersOnline = team.value.filter(x => x.active).length;
+    kpi.value.usersTotal  = team.value.length;
   } catch (e) {
-    console.error(e)
-    alert('Impossibile approvare la richiesta. Riprova.')
+    console.error(e);
+    alert('Impossibile approvare la richiesta. Riprova.');
   }
 }
+
+// --- overrides ruolo: email -> role ---
+const ROLE_OVR_KEY = 'flows_role_overrides_v1';
+
+function readRoleOverrides() {
+  try { return JSON.parse(localStorage.getItem(ROLE_OVR_KEY) || '{}') } catch { return {} }
+}
+function saveRoleOverride(email, role) {
+  if (!email) return;
+  const map = readRoleOverrides();
+  map[email.toLowerCase()] = String(role || 'user').toLowerCase();
+  localStorage.setItem(ROLE_OVR_KEY, JSON.stringify(map));
+}
+function getRoleOverride(email) {
+  if (!email) return null;
+  const map = readRoleOverrides();
+  return map[email.toLowerCase()] || null;
+}
+function clearRoleOverride(email) {
+  if (!email) return;
+  const map = readRoleOverrides();
+  delete map[email.toLowerCase()];
+  localStorage.setItem(ROLE_OVR_KEY, JSON.stringify(map));
+}
+
 
 
 
