@@ -67,15 +67,21 @@
                 <li v-for="u in pending" :key="u.id" class="pending-item">
                   <img :src="u.avatar || defaultAvatar" alt="" />
                   <div class="meta">
-                   <strong>{{ displayName(u) }}</strong>
-<small>{{ u.email || '—' }}</small>
-
+                    <strong>{{ displayName(u) }}</strong>
+                    <small>{{ u.email || '—' }}</small>
                   </div>
+
+                  <!-- 👇 RUOLO AL CENTRO -->
+                  <div class="role-center">
+                    <span class="badge-role">{{ u.roleLabel }}</span>
+                  </div>
+
                   <div class="actions">
                     <button class="ok" @click="approve(u)">✓</button>
                     <button class="ko" @click="reject(u)">✕</button>
                   </div>
                 </li>
+
               </ul>
             </div>
             <div v-else class="empty">Nessuna richiesta in sospeso.</div>
@@ -210,14 +216,42 @@ const filteredTeam = computed(() => {
 
 // --- helper persistenza pending (solo FE) ---
 function savePendingLocally(list) {
-  try { localStorage.setItem('flows_pending', JSON.stringify(list)) } catch {}
+  try { localStorage.setItem('flows_pending', JSON.stringify(normalizePendingList(list))) } catch {}
 }
+
 function loadPendingLocally() {
   try {
     const saved = localStorage.getItem('flows_pending')
     return saved ? JSON.parse(saved) : samplePending()
   } catch { return samplePending() }
 }
+
+
+function prettyRole(r) {
+  const m = {
+    admin: 'Admin',
+    user: 'User',
+    user_manager: 'User Manager',
+    logs_manager: 'Logs Manager'
+  }
+  return m[(r || '').toLowerCase()] || 'User'
+}
+
+function displayRole(u) {
+  // fallback robusto: label → pretty(role) → 'User'
+  return u?.roleLabel || prettyRole(u?.role) || 'User'
+}
+
+function normalizePendingList(list) {
+  return (list || []).map(p => {
+    const role = p.role || 'user'
+    const roleLabel = p.roleLabel || prettyRole(role)
+    return { ...p, role, roleLabel }
+  })
+}
+
+
+
 
 async function loadPendingFromBackend() {
   try {
@@ -230,7 +264,9 @@ async function loadPendingFromBackend() {
       id: r.id,
       name: r.name,
       email: r.email,
-      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54'
+      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
+      role: r.role || 'user',
+      roleLabel: prettyRole(r.role || 'user')
     }))
   } catch {
     // se l’endpoint non esiste ancora o fallisce, usa il locale
@@ -328,16 +364,7 @@ async function loadTeam() {
                  : Array.isArray(data?.users) ? data.users
                  : []
 
-    // mappo al formato usato dalle card
-  function prettyRole(r) {
-  const m = {
-    admin: 'Admin',
-    user: 'User',
-    user_manager: 'User Manager',
-    logs_manager: 'Logs Manager'
-  }
-  return m[(r || '').toLowerCase()] || 'User'
-}
+  
 
 team.value = items.map(u => {
   const override = getNameOverride(u.email)
@@ -368,23 +395,25 @@ team.value = items.map(u => {
   }
 }
 
-// --- handler evento da sidebar: aggiunge subito il nuovo pending ---
 function onNewPending(e) {
   const item = e.detail
   if (!item || !item.id) return
-  if (!pending.value.some(p => p.id === item.id)) {
-    pending.value = [item, ...pending.value]
+  const norm = normalizePendingList([item])[0]
+  if (!pending.value.some(p => p.id === norm.id)) {
+    pending.value = [norm, ...pending.value]
   }
 }
+
 
 // --- dati di fallback ---
 function samplePending() {
   return [
-    { id: 1, name: 'John Doe',  email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11' },
-    { id: 2, name: 'Jane Smith',email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32' },
-    { id: 3, name: 'Alex Brown',email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5'  },
+    { id: 1, name: 'John Doe',  email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11', role: 'user', roleLabel: prettyRole('user') },
+    { id: 2, name: 'Jane Smith',email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32', role: 'user', roleLabel: prettyRole('user') },
+    { id: 3, name: 'Alex Brown',email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5',  role: 'user', roleLabel: prettyRole('user') },
   ]
 }
+
 
 function saveNameOverride(email, name) {
   try {
@@ -534,7 +563,7 @@ window.addEventListener('flows:new-pending', (e) => {
   if (email && username) setPreferred(email, username)
 })
 
-  </script>
+</script>
 
 <style scoped>
 /* Layout base */
@@ -627,7 +656,8 @@ window.addEventListener('flows:new-pending', (e) => {
 }
 
 .pending-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto; /* avatar | meta | ruolo | azioni */
   align-items: center;
   gap: 10px;
   padding: 8px;
@@ -641,9 +671,6 @@ window.addEventListener('flows:new-pending', (e) => {
   border-radius: 50%;
 }
 
-.pending-item .meta {
-  flex: 1;
-}
 
 .pending-item .meta strong {
   display: block;
@@ -699,6 +726,14 @@ window.addEventListener('flows:new-pending', (e) => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
+}
+
+.role-center {
+  justify-self: center;      /* vero centro della riga */
+}
+
+.pending-item .actions {
+  justify-self: end;         /* bottoni a destra */
 }
 
 .kpi {
@@ -798,6 +833,20 @@ window.addEventListener('flows:new-pending', (e) => {
 }
 .badge.success { background: #ecfdf5; color: #16a34a; }
 .badge.danger  { background: #fef2f2; color: #ef4444; }
+
+.badge-role {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #eef2ff;
+  color: #3b82f6;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;        
+  min-width: 72px;            
+  text-align: center;
+}
 
 .icon-btn {
   border: none;
