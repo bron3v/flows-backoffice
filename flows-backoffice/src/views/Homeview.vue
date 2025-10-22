@@ -107,7 +107,6 @@
                     <img :src="m.avatar || defaultAvatar" alt="" />
                     <div>
                       <div class="name">{{ m.name }}</div>
-                      <div class="small muted">{{ m.email || m.username }}</div>
 
                     </div>
                   </td>
@@ -117,7 +116,7 @@
                     <span class="badge danger"  v-else>Offline</span>
                   </td>
 
-                  <td>{{ m.role }}</td>
+                  <td class="role">{{ m.role }}</td>
 
                   <td class="t-right">
                     <div class="actions">
@@ -330,19 +329,31 @@ async function loadTeam() {
                  : []
 
     // mappo al formato usato dalle card
-    team.value = items.map(u => {
-    const override = getNameOverride(u.email)
-    return {
-      id: u.id ?? null,
-      username: u.username ?? null,
-      // priorità: override FE → (eventuale) u.name → username → email local-part
-      name: override || u.name || u.username || (u.email && String(u.email).split('@')[0]) || 'Utente',
-      email: u.email || '',
-      active: !!(u.online ?? u.active),
-      role: u.role || 'Member',
-      avatar: u.avatar,
-    }
-  })
+  function prettyRole(r) {
+  const m = {
+    admin: 'Admin',
+    user: 'User',
+    user_manager: 'User Manager',
+    logs_manager: 'Logs Manager'
+  }
+  return m[(r || '').toLowerCase()] || 'User'
+}
+
+team.value = items.map(u => {
+  const override = getNameOverride(u.email)
+  const rawRole = (u.role || u.user?.role || '').toString().toLowerCase()
+  return {
+    id: u.id ?? null,
+    username: u.username ?? null,
+    name: override || u.name || u.username || (u.email && String(u.email).split('@')[0]) || 'Utente',
+    email: u.email || '',
+    active: !!(u.online ?? u.active),
+    role: rawRole || 'user',                 // valore tecnico
+    roleLabel: prettyRole(rawRole || 'user'),// etichetta da mostrare
+    avatar: u.avatar,
+  }
+})
+
 
 
 
@@ -679,6 +690,10 @@ window.addEventListener('flows:new-pending', (e) => {
   gap: 18px;
 }
 
+.role{
+  color: #64748b;
+}
+
 /* KPI cards */
 .kpi-row {
   display: grid;
@@ -771,7 +786,7 @@ window.addEventListener('flows:new-pending', (e) => {
 }
 .person img { width: 34px; height: 34px; border-radius: 50%; }
 
-.name { font-weight: 600; }
+.name { font-weight: 600; color: #64748b}
 .small { font-size: .85rem; }
 .t-right { text-align: right; }
 

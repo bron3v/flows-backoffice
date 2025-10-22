@@ -252,20 +252,21 @@ adminApi.get('/users/me', (req, res) => {
 adminApi.get('/users', async (_req, res) => {
   try {
     const sql = `
-          SELECT
-      u.id,
-      u.username,
-      EXISTS (
-        SELECT 1
-        FROM public.session s
-        WHERE s.expire > NOW()                              
-          AND (s.sess->>'userId')::int = u.id              
-          AND to_timestamp(
-                GREATEST(0, COALESCE((s.sess->>'lastSeenTs')::bigint, 0)) / 1000.0
-              ) > NOW() - INTERVAL '30 seconds'             
-      ) AS online
-    FROM public.users u
-    ORDER BY online DESC, username ASC;
+      SELECT
+        u.id,
+        u.username,
+        u.role,              -- <<< aggiunto
+        EXISTS (
+          SELECT 1
+          FROM public.session s
+          WHERE s.expire > NOW()
+            AND (s.sess->>'userId')::int = u.id
+            AND to_timestamp(
+                  GREATEST(0, COALESCE((s.sess->>'lastSeenTs')::bigint, 0)) / 1000.0
+                ) > NOW() - INTERVAL '30 seconds'
+        ) AS online
+      FROM public.users u
+      ORDER BY online DESC, username ASC;
     `
     const { rows } = await pool.query(sql)
     res.json({ ok: true, items: rows })
@@ -274,6 +275,7 @@ adminApi.get('/users', async (_req, res) => {
     res.status(500).json({ ok: false, message: 'server_error' })
   }
 })
+
 
 // DELETE utente per id – no self-delete
 adminApi.delete('/users/:id', requireLogin, async (req, res) => {
