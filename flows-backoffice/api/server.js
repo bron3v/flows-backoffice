@@ -303,9 +303,12 @@ function genPassword (len = 14) {
   return out
 }
 
+// POST /admin/api/approvals/approve
 adminApi.post('/approvals/approve', async (req, res) => {
   try {
-    const { name, email, username } = req.body || {}
+    const { name, email, username, requested_role } = req.body || {}
+
+    // ---- validazioni base ----
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!username && !email) {
       return res.status(400).json({ ok: false, message: 'missing_username_or_email' })
@@ -314,13 +317,37 @@ adminApi.post('/approvals/approve', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'invalid_email' })
     }
 
+    // ---- ruolo richiesto (whitelist + default) ----
+    const ALLOWED = new Set(['user','user_manager','logs_manager','admin'])
+    const finalRole = (requested_role || '').toString().toLowerCase()
+    const roleToAssign = ALLOWED.has(finalRole) ? finalRole : 'user'
+
+    // ---- creazione utente ----
     const finalUsername = (username || email).toLowerCase()
     const plainPwd = genPassword()
+
+    // createUser inserisce username/password_hash e rispetta il default 'user'
     const user = await createUser(finalUsername, plainPwd)
     if (!user) {
       return res.status(409).json({ ok: false, message: 'user_exists' })
     }
 
+    // Se il ruolo richiesto è diverso dal default, aggiorna
+    if (roleToAssign !== 'user') {
+      await pool.query(
+        'UPDATE public.users SET role = $1 WHERE id = $2',
+        [roleToAssign, user.id]
+      )
+    }
+
+    // ricarica i dati completi (id, username, role)
+    const { rows } = await pool.query(
+      'SELECT id, username, role FROM public.users WHERE id = $1',
+      [user.id]
+    )
+    const outUser = rows[0]
+
+    // ---- email con credenziali (opzionale) ----
     if (email) {
       const subject = 'Il tuo accesso a Flows Backoffice'
       const loginUrl = process.env.LOGIN_URL || 'http://localhost:5173/login'
@@ -344,7 +371,6 @@ Password: ${plainPwd}
 
 Accedi: ${loginUrl}
 (Consiglio: modifica la password dopo il primo accesso)`
-
       await transporter.sendMail({
         from: process.env.MAIL_FROM || 'no-reply@localhost',
         to: email,
@@ -354,12 +380,14 @@ Accedi: ${loginUrl}
       })
     }
 
-    res.json({ ok: true, user })
+    // ---- risposta ----
+    return res.json({ ok: true, user: outUser }) // { id, username, role }
   } catch (err) {
     console.error('[/admin/api/approvals/approve] error:', err)
-    res.status(500).json({ ok: false, message: 'server_error' })
+    return res.status(500).json({ ok: false, message: 'server_error' })
   }
 })
+
 
 // Monta router admin protetto
 app.use('/admin/api', requireLogin, adminApi)

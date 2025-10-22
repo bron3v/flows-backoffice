@@ -55,6 +55,18 @@
             />
           </div>
 
+          <div class="field">
+            <label>Ruolo richiesto</label>
+            <select v-model="role" :disabled="loading || ok" required class="select">
+              <option value="user">User (base)</option>
+              <option value="user_manager">User manager</option>
+              <option value="logs_manager">Logs manager</option>
+              <option value="admin">Admin</option> <!-- ora NON è più disabilitato -->
+            </select>
+            <small class="hint">L’amministratore può confermare o modificare il ruolo richiesto.</small>
+          </div>
+
+
           <p v-if="error" class="err">{{ error }}</p>
           <p v-if="ok" class="ok">Richiesta inviata! Controlla la casella di posta.</p>
 
@@ -81,6 +93,9 @@ const email = ref('')
 const loading = ref(false)
 const error = ref('')
 const ok = ref(false)
+const role = ref('user')
+const ALLOWED_ROLES = new Set(['user','user_manager','logs_manager','admin'])
+
 
 function openModal () {
   error.value = ''
@@ -92,6 +107,7 @@ function openModal () {
 function resetState () {
   name.value = ''
   email.value = ''
+  role.value = 'user'
   loading.value = false
   error.value = ''
   ok.value = false
@@ -101,6 +117,8 @@ function closeModal () {
   show.value = false
   resetState()
 }
+
+
 
 function isEmail (s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
@@ -129,6 +147,15 @@ function savePreferredName(email, username) {
   } catch {}
 }
 
+function savePreferredRole(email, wantedRole) {
+  try {
+    const key = 'flows_preferred_roles'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(email).toLowerCase()] = wantedRole
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
 
 async function submit () {
   error.value = ''
@@ -142,15 +169,20 @@ async function submit () {
     error.value = 'Email non valida'
     return
   }
+  if (!ALLOWED_ROLES.has(role.value)) {
+    error.value = 'Ruolo richiesto non valido'
+    return
+  }
 
-  // 👉 username DESIDERATO: derivato dal campo "Nome"
   const desiredUsername = makeUsername(name.value)
   savePreferredName(email.value, desiredUsername)
+  savePreferredRole(email.value, role.value)   
 
   const payload = {
     name: name.value.trim(),
     email: email.value.trim().toLowerCase(),
-    username: desiredUsername           // <— passa SEMPRE l’username
+    username: desiredUsername,
+    requested_role: role.value                 
   }
 
   loading.value = true
@@ -159,12 +191,12 @@ async function submit () {
 
     ok.value = true
 
-    // Oggetto "pending" per la Home: include username e display_name
     const created = {
       id: res?.request?.id ?? Date.now(),
       name: payload.name,
       email: payload.email,
       username: desiredUsername,
+      requested_role: role.value,             
       display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
@@ -172,13 +204,14 @@ async function submit () {
     setTimeout(closeModal, 700)
 
   } catch (e) {
-    // 👉 FALLBACK: se l’endpoint non esiste ancora (404), crea il pending solo FE
     if (e?.status === 404) {
+      // fallback FE-only
       const created = {
         id: Date.now(),
         name: payload.name,
         email: payload.email,
         username: desiredUsername,
+        requested_role: role.value,            
         display_name: desiredUsername || payload.name || emailLocalPart(payload.email),
         avatar: 'https://i.pravatar.cc/40?img=54'
       }
@@ -188,7 +221,6 @@ async function submit () {
       loading.value = false
       return
     }
-
     const msg = e?.data?.message || e?.message || ''
     if (e?.status === 409)      error.value = 'Richiesta già presente per questa email'
     else if (e?.status === 422) error.value = msg || 'Dati non validi'
@@ -197,6 +229,7 @@ async function submit () {
     loading.value = false
   }
 }
+
 
 // Esc globale
 function onKey (e) {
@@ -209,103 +242,101 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 
 <style scoped>
+/* =============== SIDEBAR =============== */
 .sidebar{
-  width: 240px;
-  min-height: 100vh;
-  background: linear-gradient(180deg,#111827 0%, #0b1730 100%);
+  width:240px;
+  min-height:100vh;
+  background:linear-gradient(180deg,#111827 0%, #0b1730 100%);
   color:#cbd5e1;
   display:flex;
   flex-direction:column;
   position:sticky; top:0; left:0;
 }
-.brand{ display:flex; align-items:center; gap:10px; padding:18px 18px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
-.logo-dot{ width: 32px; height: 32px; border-radius: 50%; background: #6ee7b7; display: block; overflow: hidden; box-shadow: 0 0 0 3px rgba(110,231,183,.15); }
-.logo-dot img{ width: 125%; height: 110%; object-fit: cover; display: block; }
-.brand-name{ font-weight:700; font-size:1.1rem; letter-spacing:.3px; color:#fff; }
-.menu{ padding:8px; display:flex; flex-direction:column; gap:4px; }
-.item{ display:block; padding:10px 12px; border-radius:10px; color:#cbd5e1; text-decoration:none; }
-.item:hover{ background:rgba(255,255,255,.06); color:#fff; }
-.item.active{ background:#1f2937; color:#fff; }
-@media (max-width: 960px){ .sidebar{ display:none; } }
+.brand{display:flex;align-items:center;gap:10px;padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.06);}
+.logo-dot{width:32px;height:32px;border-radius:50%;background:#6ee7b7;display:block;overflow:hidden;box-shadow:0 0 0 3px rgba(110,231,183,.15);}
+.logo-dot img{width:125%;height:110%;object-fit:cover;display:block;}
+.brand-name{font-weight:700;font-size:1.1rem;letter-spacing:.3px;color:#fff;}
+.menu{padding:8px;display:flex;flex-direction:column;gap:4px;}
+.item{display:block;padding:10px 12px;border-radius:10px;color:#cbd5e1;text-decoration:none;}
+.item:hover{background:rgba(255,255,255,.06);color:#fff;}
+.item.active{background:#1f2937;color:#fff;}
+@media (max-width: 960px){ .sidebar{display:none;} }
 
-/* Pulsante flottante nella sidebar */
+/* =============== FLOAT BUTTON (SIDEBAR) =============== */
 #request-button{
-  position: fixed;
-  left: 16px; /* allinea dentro la sidebar */
-  bottom: 20px;
-  padding: 12px 20px;
-  background:#10b981;
-  color: white;
-  font-weight: bold;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-  transition: all 0.3s ease;
-  z-index: 10;
+  position:fixed; left:16px; bottom:20px;
+  padding:12px 20px;
+  background:#10b981; color:#fff; font-weight:700;
+  border:0; border-radius:12px; cursor:pointer;
+  box-shadow:0 4px 10px rgba(0,0,0,.15);
+  transition:box-shadow .3s ease, transform .08s ease;
+  z-index:10;
 }
-#request-button:hover { box-shadow: 0 6px 14px rgba(0,0,0,0.25); }
+#request-button:hover{box-shadow:0 6px 14px rgba(0,0,0,.25);}
+#request-button:active{transform:translateY(1px);}
 
-/* Modal */
+/* =============== MODAL =============== */
 .overlay{
-  position: fixed; inset: 0;
-  background: rgba(2,6,23,.55);
-  display: grid; place-items: center; z-index: 9999;
-  padding: 12px;
+  position:fixed; inset:0;
+  background:rgba(2,6,23,.55);
+  display:grid; place-items:center;
+  padding:12px;
+  z-index:9999;
 }
 .modal{
-  width: min(480px, 92vw);
-  background: #f5f7fb;
-  border-radius: 20px;
-  box-shadow: 0 22px 60px rgba(15,23,42,.28);
-  padding: 22px 22px 18px;
-  border: 1px solid #e5e7eb;
-  overflow: hidden; 
+  width:min(520px,92vw);
+  background:#f5f7fb;
+  border-radius:20px;
+  box-shadow:0 22px 60px rgba(15,23,42,.28);
+  padding:28px 28px 22px;          /* più aria ai lati */
+  border:1px solid #e5e7eb;
+  overflow:visible;                 /* evita clipping dei menu */
+  position:relative; z-index:1010;
 }
 .modal h3{
-  margin: 2px 0 14px;
-  font-size: 1.35rem;
-  font-weight: 800;
-  text-align: center;
-  color: #0f172a;
-  letter-spacing: .3px;
+  margin:2px 0 16px;
+  font-size:1.35rem;
+  font-weight:800;
+  text-align:center;
+  color:#0f172a;
+  letter-spacing:.3px;
 }
 
-/* campi */
-.field{ margin-bottom: 12px; }
-.field label{
-  display:block; font-size:.9rem; color:#334155; margin-bottom:6px; font-weight:600;
-}
-.field input{
+/* =============== FORM FIELDS =============== */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.field label{color:#111;font-weight:600;}
+
+.input, .select, .field input, .field select{
+  box-sizing:border-box;            /* evita sbordo a 100% */
+  display:block;
   width:100%;
-  height:46px;
-  border:1.5px solid #c8d3e1;
-  border-radius:12px;
-  outline:none;
-  padding:0 12px;
-  font-size:1rem;
-  background:#e8eef6;
-  color:#0f172a;
-  box-sizing:border-box; 
+  padding:10px 12px;
+  border:1px solid #d5dbe1;
+  border-radius:10px;
+  background:#fff;
+  font-size:14px;
+  color:#111;
 }
-.field input:focus{
-  border-color:#10b981;
-  box-shadow: 0 0 0 2px rgba(16,185,129,.25) inset;
-}
+.field input::placeholder{color:#6b7280;}
+.field select option{color:#111;}
+.field select{margin-bottom:6px;}   /* aria sotto la tendina */
+
 .field input:-webkit-autofill{
-  -webkit-box-shadow: 0 0 0 1000px #e8eef6 inset !important;
+  -webkit-box-shadow:0 0 0 1000px #e8eef6 inset !important;
   -webkit-text-fill-color:#0f172a !important;
   caret-color:#0f172a;
 }
 
-/* bottoni */
-.btns{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
-.btn{ height:44px; padding:0 18px; border-radius:12px; border:none; cursor:pointer; font-weight:800; }
-.btn.secondary{ background:#e2e8f0; color:#0f172a; }
-.btn.primary{ background:#10b981; color:#fff; box-shadow:0 8px 24px rgba(16,185,129,.22); }
-.btn.primary:hover{ filter:brightness(1.03); }
-.btn:disabled{ opacity:.7; cursor:not-allowed; }
+/* hint & messages */
+.hint{color:#6b7280;font-size:12px;margin-top:4px;display:block;}
+.err{color:#dc2626;margin-top:4px;}
+.ok{color:#059669;margin-top:4px;}
 
-.ok { color:#059669; margin-top:4px; }
-.err { color:#dc2626; margin-top:4px; }
+/* =============== BUTTONS =============== */
+.btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;}
+.btn{height:44px;padding:0 18px;border-radius:12px;border:none;cursor:pointer;font-weight:800;}
+.btn.secondary{background:#e2e8f0;color:#0f172a;}
+.btn.primary{background:#10b981;color:#fff;box-shadow:0 8px 24px rgba(16,185,129,.22);}
+.btn.primary:hover{filter:brightness(1.03);}
+.btn:disabled{opacity:.7;cursor:not-allowed;}
 </style>
