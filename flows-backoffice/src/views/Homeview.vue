@@ -6,26 +6,18 @@
     <!-- Main area -->
     <main class="main">
       <!-- Topbar -->
-      <header class="topbar">
-        <h1>Dashboard</h1>
-        <div class="top-actions">
-          <div class="search">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
-                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
-            </svg>
-            <input placeholder="Search..." v-model="q" />
-          </div>
+      <!-- Topbar -->
+      <AppTopbar
+        class="topbar-card full-bleed"
+        title="Dashboard"
+        v-model="q"
+        :session-user="sessionUser"
+        :avatar-initial="avatarInitial"
+        :full-bleed="true"
+        @search="onSearch"
+        @profile="openProfile"
+      />    
 
-          <!-- Avatar: usa username -->
-          <AvatarCard
-            :avatar-initial="avatarInitial"
-            :user-name="sessionUser?.username || 'Utente'"
-            :user-email="sessionUser?.username || 'username'"
-          />
-        </div>
-      </header>
 
       <!-- Content grid -->
       <section class="content">
@@ -149,6 +141,7 @@ import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import { api } from '@/utils/api'
 import AvatarCard from '@/components/AvatarCard.vue'
+import AppTopbar from '@/components/AppTopBar.vue'   // ⬅️ aggiungi
 
 // stato base
 const router = useRouter()
@@ -947,4 +940,72 @@ window.addEventListener('flows:new-pending', (e) => {
 @media (max-width: 720px) {
   .kpi-row { grid-template-columns: 1fr; }
 }
+
+:root { --gutter: 24px; }
+
+/* Colonna principale: stesso gutter dei componenti */
+.main{
+  padding: 0 var(--gutter) var(--gutter) 0; /* top 0 | right 24 | bottom 24 | left 0 */
+  overflow-x: clip; /* niente scroll orizzontale per sbordi full-bleed */
+}
+
+/* Topbar: stessa altezza e padding interno dei componenti */
+.app-topbar{
+  box-sizing: border-box;
+  height: 64px;
+  min-height: 64px;              /* anti-schiacciamento */
+  padding: 14px var(--gutter);   /* ⬅️ stesso padding interno */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  background: #fff;
+  color: #0b0b0c;
+  border-bottom: 1px solid #e6e8ef;
+  box-shadow: 0 1px 0 rgba(17,17,17,0.04);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Full-bleed: attacca la topbar ai bordi della pagina come in Home */
+.app-topbar.fullbleed{
+  margin: 0 calc(-1 * var(--gutter)) 16px 0; /* “sborda” a dx di 24px */
+  border-radius: 0;
+}
+
+/* Evita che i figli comprimano la barra */
+.app-topbar > * { flex-shrink: 0; }
+.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0; }
+
+/* Azioni + search: stessi spazi dei componenti */
+.app-top-actions{ display:flex; align-items:center; gap:12px; min-width:0; }
+
+/* Search pill coerente con il sistema */
+.app-search{
+  display:flex; align-items:center; gap:8px;
+  padding: 6px 10px;
+  height: 36px;
+  background:#f1f5f9;
+  border:1px solid #e6e8ef;     /* bordo leggero come le card */
+  border-radius: 10px;
+  box-shadow:none;
+  flex: 1 1 420px;               /* cresce senza schiacciare la barra */
+  max-width: 560px;
+  min-width: 210px;
+}
+.app-search svg{ width:18px; height:18px; color:#6b7280; }
+.app-search input{
+  border:0; outline:0; background:transparent; width:100%; min-width:0; color:inherit;
+}
+
+/* Titoli interni: no collasso margini */
+.app-topbar :where(h1,.title){ margin-top:0; }
+
+/* Responsive */
+@media (max-width: 768px){
+  .app-search{ flex:1 1 220px; }
+}
+
 </style>
