@@ -5,90 +5,98 @@
 
     <!-- Main area -->
     <main class="main">
-      <!-- Topbar -->
-       <AppTopbar
-          title="Dashboard"
-          v-model="q"
-          :session-user="sessionUser"
-          :avatar-initial="avatarInitial"
-          @search="onSearch"
-          @profile="openProfile"
-        >
+      <!-- TOPBAR: incollata in alto, a destra e sinistra -->
+      <AppTopbar
+        class="topbar-card"
+        title="Dashboard"
+        v-model="q"
+        :session-user="sessionUser"
+        :avatar-initial="avatarInitial"
+        @search="onSearch"
+        @profile="openProfile"
+      />
 
-        </AppTopbar>
-
-
-      <!-- KPI -->
-      <section class="kpi">
-        <div class="kpi-card">
-          <div class="kpi-title">Utenti totali</div>
-          <div class="kpi-value">{{ kpi.usersTotal }}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-title">Online ora</div>
-          <div class="kpi-value">{{ kpi.usersOnline }}</div>
-        </div>
-      </section>
-
-      <!-- PENDING APPROVALS -->
-      <section class="approvals">
-        <div class="card approvals-card">
-          <div class="card-head">
-            <h3>Utenti da approvare</h3>
-            <span class="muted" v-if="pending.length">{{ pending.length }} richieste</span>
+      <!-- CONTENUTO: centrato e separato dalla topbar -->
+      <section class="page-content">
+        <!-- KPI -->
+        <section class="kpi">
+          <div class="kpi-card">
+            <div class="kpi-title">Utenti totali</div>
+            <div class="kpi-value">{{ kpi.usersTotal }}</div>
           </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Online ora</div>
+            <div class="kpi-value">{{ kpi.usersOnline }}</div>
+          </div>
+        </section>
 
-          <div v-if="pending.length">
-            <ul class="pending-list">
-              <li v-for="u in pending" :key="u.id" class="pending-item">
-                <img :src="u.avatar || defaultAvatar" alt="" />
-                <div class="meta">
-                  <strong>{{ displayName(u) }}</strong>
-                  <small>{{ u.email || '—' }}</small>
+        <!-- PENDING APPROVALS -->
+        <section class="approvals">
+          <div class="card approvals-card">
+            <div class="card-head">
+              <h3>Utenti da approvare</h3>
+              <span class="muted" v-if="pending.length">{{ pending.length }} richieste</span>
+            </div>
+
+            <div v-if="pending.length">
+              <ul class="pending-list">
+                <li v-for="u in pending" :key="u.id" class="pending-item">
+                  <img :src="u.avatar || defaultAvatar" alt="" />
+                  <div class="meta">
+                    <strong>{{ displayName(u) }}</strong>
+                    <small>{{ u.email || '—' }}</small>
+                  </div>
+                  <div class="actions">
+                    <button class="ok" @click="approve(u)" :disabled="loadingIds.has(u.id)">✓</button>
+                    <button class="ko" @click="reject(u)" :disabled="loadingIds.has(u.id)">✕</button>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            <p v-else class="muted">Nessuna richiesta in attesa.</p>
+          </div>
+        </section>
+
+        <!-- TEAM LIST -->
+        <section class="team">
+          <div class="card">
+            <div class="card-head">
+              <h3>Team</h3>
+              <span class="muted">{{ filteredTeam.length }} risultati</span>
+            </div>
+
+            <ul class="team-grid">
+              <li
+                v-for="u in filteredTeam"
+                :key="u.id"
+                class="user-card"
+                :class="{ me: isSelf(u) }"
+              >
+                <div class="uc-head">
+                  <img :src="u.avatar || defaultAvatar" alt="" />
+                  <div>
+                    <div class="name">
+                      {{ displayName(u) }}
+                      <span v-if="isSelf(u)" class="badge">tu</span>
+                    </div>
+                    <div class="email">{{ u.email }}</div>
+                  </div>
                 </div>
-                <div class="actions">
-                  <button class="ok" @click="approve(u)" :disabled="loadingIds.has(u.id)">✓</button>
-                  <button class="ko" @click="reject(u)" :disabled="loadingIds.has(u.id)">✕</button>
+
+                <div class="uc-footer">
+                  <span class="dot" :class="u.active ? 'on' : 'off'"></span>
+                  <span class="status">{{ u.active ? 'online' : 'offline' }}</span>
                 </div>
               </li>
             </ul>
           </div>
-          <p v-else class="muted">Nessuna richiesta in attesa.</p>
-        </div>
+        </section>
       </section>
-
-      <!-- TEAM LIST -->
-      <section class="team">
-        <div class="card">
-          <div class="card-head">
-            <h3>Team</h3>
-            <span class="muted">{{ filteredTeam.length }} risultati</span>
-          </div>
-
-          <ul class="team-grid">
-            <li v-for="u in filteredTeam" :key="u.id" class="user-card" :class="{ me: isSelf(u) }">
-              <div class="uc-head">
-                <img :src="u.avatar || defaultAvatar" alt="" />
-                <div>
-                  <div class="name">
-                    {{ displayName(u) }}
-                    <span v-if="isSelf(u)" class="badge">tu</span>
-                  </div>
-                  <div class="email">{{ u.email }}</div>
-                </div>
-              </div>
-
-              <div class="uc-footer">
-                <span class="dot" :class="u.active ? 'on' : 'off'"></span>
-                <span class="status">{{ u.active ? 'online' : 'offline' }}</span>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <!-- /page-content -->
     </main>
   </div>
 </template>
+
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
@@ -383,7 +391,31 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
   box-shadow: none !important;
 }
 
-/* 3) La main non aggiunge margini a sinistra */
-.main{ margin-left: 0; }
+.main{
+  padding: 0 24px 24px 0;   /* top 0 | right 24 | bottom 24 | left 0 */
+}
+
+.topbar-card{
+  margin: 0;
+  width: 100%;
+  border-top-left-radius: 0;
+}
+
+/* elimina eventuali artefatti sub-pixel */
+.layout, .main { overflow-x: clip; }
+
+
+/* 🔧 anti-collasso: azzera il margine del primo titolo interno */
+.topbar-card :where(h1, .title){ margin-top: 0; }
+
+/* in caso di scoped CSS in Vue, usa deep selector: */
+:deep(.topbar-card h1){ margin-top: 0; }
+
+/* (opzionale) sticky come in home */
+@supports (position: sticky){
+  .topbar-card{ position: sticky; top: 0; z-index: 10; }
+}
+
+
 </style>
 
