@@ -1,7 +1,7 @@
 <template>
   <!-- Trigger -->
   <div class="avatar-wrapper" ref="triggerRef" @click="open = true">
-    <div class="avatar">{{ avatarInitial }}</div>
+    <div class="avatar">{{ initialToShow }}</div>
   </div>
 
   <!-- Overlay + Card -->
@@ -23,15 +23,16 @@
           <h3 id="avatar-card-title">Account</h3>
         </header>
 
+
         <div class="card-body">
           <div class="user-row">
-            <div class="avatar big">{{ avatarInitial }}</div>
+            <div class="avatar big">{{ initialToShow }}</div>
             <div class="u-info">
               <strong class="u-name">{{ userNameDisplay }}</strong>
-              <span class="u-mail">{{ userSecondLine }}</span>
             </div>
           </div>
         </div>
+
 
         <footer class="card-footer">
           <button type="button" class="btn btn-ghost" @click="close">Annulla</button>
@@ -50,15 +51,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { markLoggedOut } from '@/router'
 
 const props = defineProps({
   avatarInitial: { type: String, default: 'A' },
-  // Nel nuovo sistema questo è lo username visuale
   userName: { type: String, default: 'Utente' },
-  // Può essere vuoto: se non presente, mostriamo comunque lo username anche sotto
   userEmail: { type: String, default: '' },
   logoutUrl: { type: String, default: '/auth/logout' },
 })
@@ -69,8 +68,62 @@ const loggingOut = ref(false)
 const triggerRef = ref(null)
 const cardRef = ref(null)
 
-const userNameDisplay = computed(() => props.userName || 'Utente')
-const userSecondLine = computed(() => props.userEmail || props.userName || '—')
+/* ---- Stato interno derivato da props / storage / /me ---- */
+const nameRef   = ref(props.userName || '')
+const emailRef  = ref(props.userEmail || '')
+const initialRef= ref(props.avatarInitial || '')
+
+const userNameDisplay = computed(() => nameRef.value || 'Utente')
+const userSecondLine  = computed(() => emailRef.value || nameRef.value || '—')
+const initialToShow   = computed(() => initialRef.value || guessInitial(nameRef.value || emailRef.value || 'A'))
+
+// rilevazione placeholder (no TS)
+const PLACEHOLDER_NAMES  = new Set(['', 'Utente'])
+const PLACEHOLDER_EMAILS = new Set(['', 'username', '—'])
+const isRealName  = (v) => !PLACEHOLDER_NAMES.has(String(v || '').trim())
+const isRealEmail = (v) => !PLACEHOLDER_EMAILS.has(String(v || '').trim())
+
+watch(() => props.userName,  v => { if (isRealName(v))  nameRef.value  = v })
+watch(() => props.userEmail, v => { if (isRealEmail(v)) emailRef.value = v })
+watch(() => props.avatarInitial, v => { if (v) initialRef.value = v })
+
+function guessInitial (s) {
+  const str = String(s || '').trim()
+  if (!str) return 'A'
+  const first = str.split(/\s+/)[0]
+  return (first[0] || 'A').toUpperCase()
+}
+
+/* Hydration: 1) storage -> 2) /me (se serve) */
+function hydrateFromStorage () {
+  try {
+    const raw = sessionStorage.getItem('flows_user') || localStorage.getItem('flows_user')
+    if (!raw) return false
+    const u = JSON.parse(raw)
+    const nm = u && (u.name || u.username) || ''
+    const em = u && u.email || ''
+    if (nm) nameRef.value = nm
+    if (em) emailRef.value = em
+    if (!initialRef.value) initialRef.value = guessInitial(nm || em)
+    return true
+  } catch { return false }
+}
+
+async function hydrateFromMe () {
+  try {
+    const res = await fetch('/me', { credentials: 'include' })
+    if (!res.ok) return
+    const payload = await res.json().catch(() => ({}))
+    const u = payload && (payload.user || payload)
+    if (!u) return
+    const nm = u.name || u.username || ''
+    const em = u.email || ''
+    if (nm) nameRef.value = nm
+    if (em) emailRef.value = em
+    if (!initialRef.value) initialRef.value = guessInitial(nm || em)
+    try { sessionStorage.setItem('flows_user', JSON.stringify(u)) } catch {}
+  } catch {}
+}
 
 function close () { open.value = false }
 
@@ -107,14 +160,23 @@ async function logout () {
 
 function onKey (e) { if (e.key === 'Escape') close() }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('keydown', onKey)
+  // props reali? se no → storage → /me
+  const propsHaveRealData = isRealName(props.userName) || isRealEmail(props.userEmail)
+  if (!propsHaveRealData) {
+    const ok = hydrateFromStorage()
+    if (!ok) await hydrateFromMe()
+  } else {
+    if (!initialRef.value) initialRef.value = guessInitial(props.userName || props.userEmail)
+  }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKey)
 })
 </script>
+
 
 
 <style scoped>

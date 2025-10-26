@@ -38,7 +38,6 @@
         class="avatarButton"
         :avatar-initial="avatarInitial"
         :user-name="sessionUser?.username || 'Utente'"
-        :user-email="sessionUser?.username || 'username'"
         @click="$emit('profile')"
       />
     </div>

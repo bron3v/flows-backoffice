@@ -99,11 +99,18 @@
 
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
-import AppTopbar from '@/components/AppTopbar.vue'   // ✅ importa la topbar
+import AppTopbar from '@/components/AppTopbar.vue'   
 import { api } from '@/utils/api'
+import AvatarCard from '@/components/AvatarCard.vue'
+
+
+
+
+
+
 
 // ---- stato base
 const router = useRouter()
