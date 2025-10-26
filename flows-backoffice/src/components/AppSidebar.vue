@@ -339,4 +339,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 .btn.primary{background:#10b981;color:#fff;box-shadow:0 8px 24px rgba(16,185,129,.22);}
 .btn.primary:hover{filter:brightness(1.03);}
 .btn:disabled{opacity:.7;cursor:not-allowed;}
+
+
 </style>

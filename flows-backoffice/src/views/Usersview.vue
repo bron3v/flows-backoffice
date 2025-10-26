@@ -6,26 +6,17 @@
     <!-- Main area -->
     <main class="main">
       <!-- Topbar -->
-      <header class="topbar">
-        <h1>Utenti</h1>
+       <AppTopbar
+          title="Dashboard"
+          v-model="q"
+          :session-user="sessionUser"
+          :avatar-initial="avatarInitial"
+          @search="onSearch"
+          @profile="openProfile"
+        >
 
-        <div class="top-actions">
-          <div class="search">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
-                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
-            </svg>
-            <input placeholder="Cerca per nome o email..." v-model="q" />
-          </div>
+        </AppTopbar>
 
-          <!-- Avatar utente corrente / azioni veloci -->
-          <AvatarCard
-            :avatar-initial="avatarInitial"
-            :user-name="sessionUser?.username || sessionUser?.name || systemName"
-          />
-        </div>
-      </header>
 
       <!-- KPI -->
       <section class="kpi">
@@ -103,7 +94,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
-import AvatarCard from '@/components/AvatarCard.vue'
+import AppTopbar from '@/components/AppTopbar.vue'   // ✅ importa la topbar
 import { api } from '@/utils/api'
 
 // ---- stato base
@@ -118,8 +109,9 @@ const kpi     = ref({ usersTotal: 0, usersOnline: 0 })
 const pending = ref([])
 const team    = ref([])
 
-const q = ref('') // filtro ricerca
-const loadingIds = ref(new Set())
+const q = ref('')                 // filtro ricerca (v-model topbar)
+const loading = ref(false)        // ✅ usato dal bottone "New user"
+const loadingIds = ref(new Set()) // usato per pending
 
 // ---- helper: è l'utente corrente?
 function isSelf(u) {
@@ -146,7 +138,6 @@ function saveNameOverride(email, name) {
   saveNameOverrides(map)
 }
 function displayName(u) {
-  // priorità: override locale (email->nome) > u.name > email prima di '@'
   const map = readNameOverrides()
   if (u?.email && map[u.email]) return map[u.email]
   if (u?.name && String(u.name).trim()) return u.name
@@ -160,7 +151,6 @@ async function loadMe() {
     const me = await api.me()
     sessionUser.value = me || null
     if (!me) {
-      // non loggato -> vai al login
       router.replace('/login')
       return
     }
@@ -176,7 +166,6 @@ async function loadKpi() {
     if (s?.usersTotal != null) kpi.value.usersTotal = s.usersTotal
     if (s?.usersOnline != null) kpi.value.usersOnline = s.usersOnline
   } catch (e) {
-    // silenzioso: i KPI non bloccano la vista
     console.warn('[Usersview] stats error', e)
   }
 }
@@ -184,15 +173,12 @@ async function loadKpi() {
 async function loadTeam() {
   try {
     const res = await api.usersList()
-    // backend può restituire {team, pending} oppure un array di utenti
     if (Array.isArray(res)) {
       team.value = res
     } else {
       if (Array.isArray(res?.team)) team.value = res.team
       if (Array.isArray(res?.pending)) pending.value = res.pending
     }
-
-    // aggiorna KPI base se non forniti da /stats
     if (!kpi.value.usersTotal) kpi.value.usersTotal = team.value.length
     kpi.value.usersOnline = team.value.filter(x => x.active).length
   } catch (e) {
@@ -211,8 +197,6 @@ async function approve(u) {
   if (!u) return
   try {
     loadingIds.value.add(u.id)
-
-    // username suggerito: usa nome card se presente, altrimenti parte locale dell'email
     const suggestedUsername =
       (u.name && String(u.name).toLowerCase().replace(/\s+/g, '_')) ||
       (u.email && String(u.email).split('@')[0]) ||
@@ -220,19 +204,14 @@ async function approve(u) {
 
     const res = await api.approveUser({
       id: u.id,
-      name: u.name,             // mantiene il nome inserito nella card
+      name: u.name,
       email: u.email,
       username: suggestedUsername
     })
 
-    if (!res || res.ok === false) {
-      throw new Error(res?.message || 'Errore approvazione')
-    }
+    if (!res || res.ok === false) throw new Error(res?.message || 'Errore approvazione')
 
-    // salva override locale per visualizzare sempre il nome “card”
     if (u.email && u.name) saveNameOverride(u.email, u.name)
-
-    // rimuovi dalla lista pending e ricarica team
     pending.value = pending.value.filter(x => x.id !== u.id)
     await loadTeam()
   } catch (e) {
@@ -247,8 +226,7 @@ async function reject(u) {
   if (!u) return
   try {
     loadingIds.value.add(u.id)
-    // Se non hai un /admin/api/approvals/reject, usa deleteUser sull'id temporaneo
-    await api.deleteUser(u.id)
+    await api.deleteUser(u.id)   // o endpoint specifico per reject se disponibile
     pending.value = pending.value.filter(x => x.id !== u.id)
   } catch (e) {
     console.error('[Usersview] reject error', e)
@@ -258,7 +236,24 @@ async function reject(u) {
   }
 }
 
-// ---- ricerca
+// ---- ricerca (collegata alla topbar)
+function onSearch(term) {
+  // chiamato su Enter dalla search della topbar (già legata a v-model "q")
+  // qui puoi fare fetch remoto o lasciare che "filteredTeam" faccia filtraggio locale
+  // esempio: console.log('search:', term)
+}
+
+function openProfile() {
+  // apri menù profilo o pagina impostazioni
+  // esempio: router.push('/impostazioni')
+}
+
+function openModal() {
+  // apri il modal "New user" (gestisci loading se serve)
+  // loading.value = true; ...; loading.value = false
+}
+
+// ---- filtro locale team
 const filteredTeam = computed(() => {
   const term = q.value.trim().toLowerCase()
   if (!term) return team.value
@@ -278,6 +273,7 @@ onMounted(async () => {
 onBeforeUnmount(() => { if (t) clearInterval(t) })
 </script>
 
+
 <style scoped>
 /* layout */
 .layout {
@@ -287,56 +283,52 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
 }
 .main {
   padding: 24px;
-  background: var(--c-bg, #0b0b0c);
-  color: var(--c-fg, #e8e8e8);
+  background: #f5f7fb;          /* ✅ chiaro come HomeView */
+  color: #0b0b0c;
 }
 
-/* topbar */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.topbar h1 { font-size: 22px; margin: 0; }
-.top-actions { display: flex; gap: 12px; align-items: center; }
-.search {
-  display: flex; align-items: center; gap: 8px;
-  background: #131316; border: 1px solid #1f1f25;
-  padding: 6px 10px; border-radius: 10px;
-}
-.search svg { width: 18px; height: 18px; opacity: .6; }
-.search input {
-  background: transparent; border: 0; color: inherit; outline: none; min-width: 240px;
-}
+/* (rimosso) topbar: gestita da AppTopbar.vue */
 
 /* cards & sections */
-.kpi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.kpi-card, .card {
-  background: #111114; border: 1px solid #1c1c22; border-radius: 14px; padding: 16px;
+.kpi {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
-.kpi-title { font-size: 12px; opacity: .7; margin-bottom: 6px; }
-.kpi-value { font-size: 22px; font-weight: 700; }
+.kpi-card,
+.card {
+  background: #ffffff;          /* ✅ card bianche */
+  border: 1px solid #e6e8ef;    /* ✅ bordo chiaro */
+  border-radius: 14px;
+  padding: 16px;
+}
+.kpi-title { font-size: 12px; opacity: .7; margin-bottom: 6px; color:#495061; }
+.kpi-value { font-size: 22px; font-weight: 700; color:#0b0b0c; }
 
 .approvals { margin-top: 16px; }
-.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.muted { opacity: .6; font-size: 12px; }
+.card-head {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.muted { opacity: .7; font-size: 12px; color:#6b7280; }
 
+/* pending list */
 .pending-list { display: grid; gap: 8px; }
 .pending-item {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 12px;
-  align-items: center; background: #0f0f12; border: 1px solid #1a1a21; padding: 8px 10px; border-radius: 10px;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+  background: #ffffff;          /* ✅ item bianchi */
+  border: 1px solid #e6e8ef;    /* ✅ bordo chiaro */
+  padding: 8px 10px; border-radius: 10px;
 }
 .pending-item img { width: 36px; height: 36px; border-radius: 50%; }
 .pending-item .meta { line-height: 1.1; }
-.pending-item .meta strong { display: block; }
-.pending-item .meta small { opacity: .7; }
+.pending-item .meta strong { display: block; color:#0b0b0c; }
+.pending-item .meta small { opacity: .7; color:#6b7280; }
 .pending-item .actions { display: flex; gap: 6px; }
 .pending-item .actions button {
   width: 32px; height: 28px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 700;
 }
-.pending-item .actions .ok { background: #113d1a; color: #86ff9b; border: 1px solid #1f6d2b; }
-.pending-item .actions .ko { background: #3d1111; color: #ff8686; border: 1px solid #6d1f1f; }
+.pending-item .actions .ok { background: #e9f7ee; color: #177245; border: 1px solid #cfe9d6; }
+.pending-item .actions .ko { background: #fdecec; color: #8a1c1c; border: 1px solid #f6caca; }
 
 /* team grid */
 .team { margin-top: 16px; }
@@ -345,18 +337,53 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
   display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
 }
 .user-card {
-  background: #0e0e12; border: 1px solid #1b1b22; border-radius: 12px; padding: 12px;
+  background: #ffffff;          /* ✅ user card bianche */
+  border: 1px solid #e6e8ef;
+  border-radius: 12px;
+  padding: 12px;
   display: grid; gap: 10px;
 }
-.user-card.me { border-color: #2b5cff; box-shadow: 0 0 0 1px #2b5cff33 inset; }
+.user-card.me { border-color: #2b5cff; box-shadow: 0 0 0 1px #2b5cff1f inset; }
 .uc-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
 .uc-head img { width: 42px; height: 42px; border-radius: 50%; }
-.name { font-weight: 700; display: flex; align-items: center; gap: 6px; }
-.email { font-size: 12px; opacity: .7; }
-.badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #1a2d5c; color: #9bb7ff; }
+.name { font-weight: 700; display: flex; align-items: center; gap: 6px; color:#0b0b0c; }
+.email { font-size: 12px; opacity: .75; color:#6b7280; }
+.badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #e8eeff; color: #274690; }
 
-.uc-footer { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .8; }
+.uc-footer { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .9; color:#495061; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.dot.on  { background: #33d17a; }
-.dot.off { background: #666; }
+.dot.on  { background: #10b981; }
+.dot.off { background: #9aa3b2; }
+
+/* (opzionale) se hai ancora questa classe nella pagina, rendila chiara per coerenza */
+.search {
+  display: flex; align-items: center; gap: 8px;
+  background: #f5f7fb; border: 1px solid #e6e8ef;
+  padding: 6px 10px; border-radius: 10px;
+}
+.search svg { width: 18px; height: 18px; opacity: .6; }
+.search input {
+  background: transparent; border: 0; color: #0b0b0c; outline: none; min-width: 240px;
+}
+
+/* 1) Grid senza gap e con larghezza sidebar coerente */
+.layout{
+  --sidebar-w: 240px;                 /* ⬅️ usa ESATTAMENTE la larghezza della tua AppSidebar */
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  gap: 0;
+}
+
+/* 2) La sidebar occupa tutta la sua colonna (no bordo/ombra) */
+:deep(.sidebar){
+  width: var(--sidebar-w) !important;
+  min-width: var(--sidebar-w) !important;
+  max-width: var(--sidebar-w) !important;
+  border-right: 0 !important;
+  box-shadow: none !important;
+}
+
+/* 3) La main non aggiunge margini a sinistra */
+.main{ margin-left: 0; }
 </style>
+
