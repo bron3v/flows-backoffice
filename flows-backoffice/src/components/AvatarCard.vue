@@ -75,7 +75,15 @@ const initialRef= ref(props.avatarInitial || '')
 
 const userNameDisplay = computed(() => nameRef.value || 'Utente')
 const userSecondLine  = computed(() => emailRef.value || nameRef.value || '—')
-const initialToShow   = computed(() => initialRef.value || guessInitial(nameRef.value || emailRef.value || 'A'))
+
+const initialToShow = computed(() => {
+  const propInit = String(initialRef.value || '').trim().toUpperCase()
+  const fromName = guessInitial(nameRef.value || emailRef.value || '')
+  // se il prop è una lettera reale diversa da 'A', onora il prop
+  if (propInit && propInit !== 'A') return propInit
+  // altrimenti usa quella calcolata dal nome/email
+  return fromName || 'A'
+})
 
 // rilevazione placeholder (no TS)
 const PLACEHOLDER_NAMES  = new Set(['', 'Utente'])

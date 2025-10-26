@@ -78,7 +78,7 @@ const props = withDefaults(defineProps<{
   box-shadow: 0 1px 0 rgba(17,17,17,0.04);
 }
 
-/* 👉 versione “attaccata”: compensa il padding 24px di .main */
+
 .app-topbar.fullbleed {
   margin: -24px -24px 16px;   /* sborda a sx/dx e su */
   padding: 14px 24px;         /* riallinea il contenuto */
