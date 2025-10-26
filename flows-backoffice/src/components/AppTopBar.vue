@@ -78,33 +78,43 @@ const props = withDefaults(defineProps<{
   box-shadow: 0 1px 0 rgba(17,17,17,0.04);
 }
 
-
 .app-topbar.fullbleed {
   margin: -24px -24px 16px;   /* sborda a sx/dx e su */
   padding: 14px 24px;         /* riallinea il contenuto */
   border-radius: 0;           /* niente angoli */
 }
 
-.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0;}
+.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0; }
+
 .app-top-actions { display: flex; gap: 12px; align-items: center; }
-.app-search {
-  display: flex; align-items: center; gap: 8px;
+
+/* Search: stesse misure, angoli leggermente stondati */
+/* == Search aggiornata con le proprietà richieste == */
+.app-search{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
   padding: 6px 10px;
+  border-radius: 10px;
   border: none;
   box-shadow: none;
-  background:  #eef2f7;
 }
-.app-search svg { width: 18px; height: 18px; }
-.app-search input {
-  background: transparent; border: none; outline: none;
-  color: #0b0b0c; min-width: 220px;
-}
-.app-search input::placeholder { color:  #eef2f7; }
 
-.topbar-search{
-  padding: 0
+.app-search svg{
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
 }
-.avatarButton{
-  padding:0
+
+.app-search input{
+  border: none;
+  outline: none;
+  background: transparent;
+  min-width: 210px;
+  color: inherit; /* usa il colore del contenitore */
 }
+
+.topbar-search { padding: 0; }
+.avatarButton { padding: 0; }
 </style>

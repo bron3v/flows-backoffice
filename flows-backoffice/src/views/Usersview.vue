@@ -102,7 +102,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
-import AppTopbar from '@/components/AppTopbar.vue'   
+import AppTopbar from '@/components/AppTopBar.vue'   
 import { api } from '@/utils/api'
 import AvatarCard from '@/components/AvatarCard.vue'
 
@@ -370,16 +370,6 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
 .dot.on  { background: #10b981; }
 .dot.off { background: #9aa3b2; }
 
-/* (opzionale) se hai ancora questa classe nella pagina, rendila chiara per coerenza */
-.search {
-  display: flex; align-items: center; gap: 8px;
-  background:  #eef2f7; border: none;
-  padding: 6px 10px; border-radius: 10px;
-}
-.search svg { width: 18px; height: 18px; opacity: .6; }
-.search input {
-  background: transparent; border: 0; color: #0b0b0c; outline: none; min-width: 240px;
-}
 
 /* 1) Grid senza gap e con larghezza sidebar coerente */
 .layout{
