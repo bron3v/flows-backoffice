@@ -291,7 +291,7 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
 }
 .main {
   padding: 24px;
-  background: #f5f7fb;          /* ✅ chiaro come HomeView */
+  background:  #eef2f7;          /* ✅ chiaro come HomeView */
   color: #0b0b0c;
 }
 
@@ -366,7 +366,7 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
 /* (opzionale) se hai ancora questa classe nella pagina, rendila chiara per coerenza */
 .search {
   display: flex; align-items: center; gap: 8px;
-  background: #f5f7fb; border: 1px solid #e6e8ef;
+  background:  #eef2f7; border: none;
   padding: 6px 10px; border-radius: 10px;
 }
 .search svg { width: 18px; height: 18px; opacity: .6; }

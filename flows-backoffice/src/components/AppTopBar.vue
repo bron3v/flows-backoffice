@@ -24,6 +24,7 @@
                 stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
         </svg>
         <input
+          class="topbar-search"
           :placeholder="searchPlaceholder"
           :value="modelValue"
           @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
@@ -34,6 +35,7 @@
       <slot name="actions"></slot>
 
       <AvatarCard
+        class="avatarButton"
         :avatar-initial="avatarInitial"
         :user-name="sessionUser?.username || 'Utente'"
         :user-email="sessionUser?.username || 'username'"
@@ -84,19 +86,26 @@ const props = withDefaults(defineProps<{
   border-radius: 0;           /* niente angoli */
 }
 
-.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0; }
+.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0;}
 .app-top-actions { display: flex; gap: 12px; align-items: center; }
 .app-search {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 10px;
-  border: 1px solid #e6e8ef;
-  border-radius: 10px;
-  background: #f5f7fb;
+  border: none;
+  box-shadow: none;
+  background:  #eef2f7;
 }
 .app-search svg { width: 18px; height: 18px; }
 .app-search input {
   background: transparent; border: none; outline: none;
   color: #0b0b0c; min-width: 220px;
 }
-.app-search input::placeholder { color: #7a7f8c; }
+.app-search input::placeholder { color:  #eef2f7; }
+
+.topbar-search{
+  padding: 0
+}
+.avatarButton{
+  padding:0
+}
 </style>
