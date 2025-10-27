@@ -30,8 +30,8 @@
           </div>
         </section>
 
-        <!-- PENDING APPROVALS -->
-        <section class="approvals">
+       
+        <!-- Utenti da approvare DOPO i KPI -->
           <div class="card approvals-card">
             <div class="card-head">
               <h3>Utenti da approvare</h3>
@@ -46,16 +46,21 @@
                     <strong>{{ displayName(u) }}</strong>
                     <small>{{ u.email || '—' }}</small>
                   </div>
+
+                  <!-- 👇 RUOLO AL CENTRO -->
+                  <div class="role-center">
+                    <span class="badge-role">{{ u.roleLabel }}</span>
+                  </div>
+
                   <div class="actions">
-                    <button class="ok" @click="approve(u)" :disabled="loadingIds.has(u.id)">✓</button>
-                    <button class="ko" @click="reject(u)" :disabled="loadingIds.has(u.id)">✕</button>
+                    <button class="ok" @click="approve(u)">✓</button>
+                    <button class="ko" @click="reject(u)">✕</button>
                   </div>
                 </li>
               </ul>
             </div>
-            <p v-else class="muted">Nessuna richiesta in attesa.</p>
+            <div v-else class="empty">Nessuna richiesta in sospeso.</div>
           </div>
-        </section>
 
         <!-- TEAM LIST -->
         <section class="team">
@@ -171,7 +176,7 @@
 
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRouter, useRoute, RouterLink  } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import AppTopbar from '@/components/AppTopBar.vue'   
@@ -200,6 +205,11 @@ const q = ref('')                 // filtro ricerca (v-model topbar)
 const loading = ref(false)        // ✅ usato dal bottone "New user"
 const loadingIds = ref(new Set()) // usato per pending
 
+const PENDING_KEY    = 'flows_pending_v2'
+const NAME_PREF_KEY  = 'flows_preferred_names'
+const ROLE_PREF_KEY  = 'flows_preferred_roles'
+
+
 // ---- helper: è l'utente corrente?
 function isSelf(u) {
   const me = sessionUser.value
@@ -218,19 +228,8 @@ function readNameOverrides() {
 function saveNameOverrides(map) {
   try { localStorage.setItem(NAME_OVR_KEY, JSON.stringify(map)) } catch {}
 }
-function saveNameOverride(email, name) {
-  if (!email || !name) return
-  const map = readNameOverrides()
-  map[email] = name
-  saveNameOverrides(map)
-}
-function displayName(u) {
-  const map = readNameOverrides()
-  if (u?.email && map[u.email]) return map[u.email]
-  if (u?.name && String(u.name).trim()) return u.name
-  if (u?.email) return String(u.email).split('@')[0]
-  return 'Utente'
-}
+
+
 
 // ---- caricamenti
 async function loadMe() {
@@ -241,9 +240,14 @@ async function loadMe() {
       router.replace('/login')
       return
     }
+    if (!me && router.currentRoute.value.path !== '/login') {
+     router.replace('/login')
+     return
+   }
     avatarInitial.value = (me.username || me.name || 'A').slice(0, 1).toUpperCase()
   } catch {
     router.replace('/login')
+    if (router.currentRoute.value.path !== '/login') router.replace('/login')
   }
 }
 
@@ -257,22 +261,6 @@ async function loadKpi() {
   }
 }
 
-async function loadTeam() {
-  try {
-    const res = await api.usersList()
-    if (Array.isArray(res)) {
-      team.value = res
-    } else {
-      if (Array.isArray(res?.team)) team.value = res.team
-      if (Array.isArray(res?.pending)) pending.value = res.pending
-    }
-    if (!kpi.value.usersTotal) kpi.value.usersTotal = team.value.length
-    kpi.value.usersOnline = team.value.filter(x => x.active).length
-  } catch (e) {
-    console.error('[Usersview] usersList error', e)
-    alert('Impossibile caricare la lista utenti.')
-  }
-}
 
 async function loadAll() {
   await loadMe()
@@ -280,48 +268,8 @@ async function loadAll() {
 }
 
 // ---- azioni approvazione / rifiuto
-async function approve(u) {
-  if (!u) return
-  try {
-    loadingIds.value.add(u.id)
-    const suggestedUsername =
-      (u.name && String(u.name).toLowerCase().replace(/\s+/g, '_')) ||
-      (u.email && String(u.email).split('@')[0]) ||
-      undefined
 
-    const res = await api.approveUser({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      username: suggestedUsername
-    })
 
-    if (!res || res.ok === false) throw new Error(res?.message || 'Errore approvazione')
-
-    if (u.email && u.name) saveNameOverride(u.email, u.name)
-    pending.value = pending.value.filter(x => x.id !== u.id)
-    await loadTeam()
-  } catch (e) {
-    console.error('[Usersview] approve error', e)
-    alert('Impossibile approvare la richiesta.')
-  } finally {
-    loadingIds.value.delete(u.id)
-  }
-}
-
-async function reject(u) {
-  if (!u) return
-  try {
-    loadingIds.value.add(u.id)
-    await api.deleteUser(u.id)   // o endpoint specifico per reject se disponibile
-    pending.value = pending.value.filter(x => x.id !== u.id)
-  } catch (e) {
-    console.error('[Usersview] reject error', e)
-    alert('Impossibile rifiutare la richiesta.')
-  } finally {
-    loadingIds.value.delete(u.id)
-  }
-}
 
 // ---- ricerca (collegata alla topbar)
 function onSearch(term) {
@@ -336,17 +284,6 @@ function openProfile() {
 }
 
 
-
-// ---- filtro locale team
-const filteredTeam = computed(() => {
-  const term = q.value.trim().toLowerCase()
-  if (!term) return team.value
-  return team.value.filter(u => {
-    const name = displayName(u).toLowerCase()
-    const email = (u.email || '').toLowerCase()
-    return name.includes(term) || email.includes(term)
-  })
-})
 
 // ---- polling leggero per KPI/online
 let t = null
@@ -389,23 +326,6 @@ function makeUsername (fullName) {
     .slice(0, 32)
 }
 
-/* preferenze locali per rendering lista pending */
-function savePreferredName(emailAddr, displayName) {
-  try {
-    const key = 'flows_preferred_names'
-    const map = JSON.parse(localStorage.getItem(key) || '{}')
-    map[String(emailAddr || '').toLowerCase()] = String(displayName || '').trim()
-    localStorage.setItem(key, JSON.stringify(map))
-  } catch {}
-}
-function savePreferredRole(emailAddr, wantedRole) {
-  try {
-    const key = 'flows_preferred_roles'
-    const map = JSON.parse(localStorage.getItem(key) || '{}')
-    map[String(emailAddr || '').toLowerCase()] = wantedRole
-    localStorage.setItem(key, JSON.stringify(map))
-  } catch {}
-}
 
 /* semplice chiave antidual per evitare doppie richieste */
 function pendingKey(emailAddr) {
@@ -527,6 +447,520 @@ function onKey (e) {
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
+//Funzioni pending
+/* ---------- Helpers ruolo & normalizzazione ---------- */
+
+
+function cryptoRandomId() {
+  try {
+    const rnd = (globalThis.crypto && 'randomUUID' in globalThis.crypto)
+      ? globalThis.crypto.randomUUID()
+      : `x_${Math.random().toString(36).slice(2)}`;
+    return rnd;
+  } catch {
+    return `x_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+/* ---------- Preferenze locali: nome & ruolo ---------- */
+function savePreferredName(email, displayName) {
+  try {
+    const key = NAME_PREF_KEY
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(email || '').toLowerCase()] = String(displayName || '').trim()
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+function preferredRoleFor(email) {
+  try {
+    const map = JSON.parse(localStorage.getItem(ROLE_PREF_KEY) || '{}')
+    return map[String(email || '').toLowerCase()] || ''
+  } catch { return '' }
+}
+function savePreferredRole(email, role) {
+  try {
+    const key = ROLE_PREF_KEY
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(email || '').toLowerCase()] = String(role || 'user').toLowerCase()
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+function clearPreferredRole(email) {
+  try {
+    const key = ROLE_PREF_KEY
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    delete map[String(email || '').toLowerCase()]
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
+
+function usernameFromDisplay(fullName) {
+  return String(fullName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')          // spazi -> punti
+    .replace(/[^a-z0-9_.-]/g, '')  // caratteri sicuri
+    .slice(0, 32)
+}
+
+
+/* ---------- Bootstrap pending: merge server + locale ---------- */
+async function bootstrapPending() {
+  const serverPending = await loadPendingFromBackend()
+  const localPending  = loadPendingLocally()
+  pending.value = mergePending(localPending, serverPending)
+}
+
+
+/* ---------- Hook globali per pending ---------- */
+onMounted(() => {
+  window.addEventListener('flows:new-pending', onNewPending)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('flows:new-pending', onNewPending)
+})
+
+
+
+// timer interno al componente
+let heartbeatTimer = null
+
+function startHeartbeat() {
+  stopHeartbeat()
+  heartbeatTimer = setInterval(() => {
+    fetch('/me/ping', { method: 'POST', credentials: 'include' })
+      .catch(() => {}) // ignora errori transitori
+  }, 10_000) // ogni 10s
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer)
+  heartbeatTimer = null
+}
+
+// avvia quando la view è montata, ferma quando esce
+onMounted(startHeartbeat)
+onBeforeUnmount(stopHeartbeat)
+
+// opzionale: ping immediato quando la tab torna visibile
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    fetch('/me/ping', { method: 'POST', credentials: 'include' }).catch(() => {})
+  }
+})  
+
+
+
+// filtro client-side
+const filteredTeam = computed(() => {
+  const term = q.value.trim().toLowerCase()
+  if (!term) return team.value
+  return team.value.filter(m =>
+    String(m.username || '').toLowerCase().includes(term) ||
+    String(m.name || '').toLowerCase().includes(term)
+  )
+})
+
+// --- helper persistenza pending (solo FE) ---
+function savePendingLocally(list) {
+  try { localStorage.setItem('flows_pending', JSON.stringify(normalizePendingList(list))) } catch {}
+}
+
+function loadPendingLocally() {
+  try {
+    const saved = localStorage.getItem('flows_pending')
+    return saved ? JSON.parse(saved) : samplePending()
+  } catch { return samplePending() }
+}
+
+
+function prettyRole(role) {
+  const k = String(role || '').toLowerCase();
+  return ({
+    admin: 'Admin',
+    user_manager: 'User Manager',
+    logs_manager: 'Logs Manager',
+    user: 'User',
+  })[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'User');
+}
+
+function displayRole(u) {
+  // fallback robusto: label → pretty(role) → 'User'
+  return u?.roleLabel || prettyRole(u?.role) || 'User'
+}
+
+function normalizePendingList(list) {
+  return (list || []).map(p => {
+    const raw = p.role ?? p.requested_role ?? p.requestedRole ?? null;
+    const role = String(raw || 'user').toLowerCase();
+    const roleLabel = p.roleLabel || prettyRole(role);
+    return { ...p, role, roleLabel };
+  });
+}
+
+
+
+
+function preferredNameFor(email) {
+  try {
+    const key = 'flows_preferred_names'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    return map[String(email || '').toLowerCase()] || ''
+  } catch { return '' }
+}
+
+async function loadPendingFromBackend() {
+  const data = await api.approvalsList().catch(() => ({}))
+  const items = Array.isArray(data?.items) ? data.items
+              : Array.isArray(data?.approvals) ? data.approvals
+              : []
+  return items.map(r => {
+    const pref = preferredNameFor(r.email)
+    const display = pref || r.display_name || r.name
+    return {
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      username: r.username,
+      requested_role: r.requested_role || r.role || 'user',
+      roleLabel: prettyRole(r.requested_role || r.role || 'user'),
+      avatar: r.avatar || 'https://i.pravatar.cc/40?img=54',
+      display_name: display || (r.email ? String(r.email).split('@')[0] : 'Nuovo utente')
+    }
+  })
+}
+
+
+
+function mergePending(localList, serverList) {
+  // evita duplicati per id/email
+  const byKey = new Map()
+  ;[...serverList, ...localList].forEach(x => {
+    const key = x.id ?? x.email
+    if (!byKey.has(key)) byKey.set(key, x)
+  })
+  return [...byKey.values()]
+}
+
+
+// --- bootstrap pagina ---
+let intervalId = null
+
+onMounted(() => {
+  bootstrap()
+  window.addEventListener('focus', onFocusRefresh)
+  window.addEventListener('flows:new-pending', onNewPending)
+  // auto refresh ogni 30s per aggiornare "online"
+  intervalId = setInterval(refreshUsersAndKpi, 30_000)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', onFocusRefresh)
+  window.removeEventListener('flows:new-pending', onNewPending)
+  if (intervalId) clearInterval(intervalId)
+})
+
+// salva pending ad ogni modifica (solo FE)
+watch(pending, v => savePendingLocally(v), { deep: true })
+
+async function bootstrap() {
+  // 1) verifica sessione
+  try {
+    const me = await api.me()
+    if (!me?.ok || !me?.user) throw new Error('NOT_LOGGED_IN')
+    sessionUser.value = me.user
+    const seed = (me.user?.username || 'A').trim()
+    avatarInitial.value = seed ? seed[0].toUpperCase() : 'A'
+  } catch {
+    const redirect = route.fullPath || '/'
+    router.push({ path: '/login', query: { redirect } })
+    return
+  }
+
+  // 2) stats KPI
+  await loadStats()
+
+  // 3) pending: usa backend se c'è, con fallback e merge col locale
+  const serverPending = await loadPendingFromBackend()
+  const localPending  = loadPendingLocally()
+  pending.value = mergePending(localPending, serverPending)
+
+  // 4) team dal backend
+  await loadTeam()
+}
+
+async function onFocusRefresh() {
+  await refreshUsersAndKpi()
+}
+
+async function refreshUsersAndKpi() {
+  await Promise.all([loadTeam(), loadStats().catch(() => {})])
+  // in ogni caso, riallinea KPI con ciò che vedi a schermo
+  kpi.value.usersOnline = team.value.filter(x => x.active).length
+  kpi.value.usersTotal  = team.value.length
+}
+
+async function loadStats() {
+  try {
+    const s = await api.stats()
+    const st = s?.stats || s || {}
+    kpi.value.usersTotal  = Number(st.usersTotal ?? st.totalUsers ?? kpi.value.usersTotal ?? 0)
+    kpi.value.usersOnline = Number(st.usersOnline ?? st.onlineUsers ?? kpi.value.usersOnline ?? 0)
+    if (st.systemName) systemName.value = String(st.systemName)
+  } catch {
+    // fallback: lascio ai dati di team
+  }
+}
+
+const teamError = ref('')
+async function loadTeam() {
+  teamError.value = ''
+  try {
+    const data = await api.usersList() // { ok, items } o { users: [...] }
+    // accetta entrambi i payload
+    const items = Array.isArray(data?.items) ? data.items
+                 : Array.isArray(data?.users) ? data.users
+                 : []
+
+  
+
+team.value = items.map(u => {
+  const override = getNameOverride(u.email)
+  const rawRole = (u.role || u.user?.role || '').toString().toLowerCase()
+  return {
+    id: u.id ?? null,
+    username: u.username ?? null,
+    name: override || u.name || u.username || (u.email && String(u.email).split('@')[0]) || 'Utente',
+    email: u.email || '',
+    active: !!(u.online ?? u.active),
+    role: rawRole || 'user',                 // valore tecnico
+    roleLabel: prettyRole(rawRole || 'user'),// etichetta da mostrare
+    avatar: u.avatar,
+  }
+})
+
+
+
+
+
+    // riallinea KPI ai dati correnti
+    kpi.value.usersOnline = team.value.filter(x => x.active).length
+    kpi.value.usersTotal  = team.value.length
+  } catch (e) {
+    console.error('GET /admin/api/users failed:', e)
+    team.value = []
+    teamError.value = 'Impossibile caricare gli utenti'
+  }
+}
+
+function onNewPending(e) {
+  const item = e.detail
+  if (!item || !item.id) return
+  const norm = normalizePendingList([item])[0]
+  if (!pending.value.some(p => p.id === norm.id)) {
+    pending.value = [norm, ...pending.value]
+  }
+}
+
+
+// --- dati di fallback ---
+function samplePending() {
+  return [
+    { id: 1, name: 'John Doe',  email: 'john@example.com', avatar: 'https://i.pravatar.cc/40?img=11', role: 'user', roleLabel: prettyRole('user') },
+    { id: 2, name: 'Jane Smith',email: 'jane@example.com', avatar: 'https://i.pravatar.cc/40?img=32', role: 'user', roleLabel: prettyRole('user') },
+    { id: 3, name: 'Alex Brown',email: 'alex@example.com', avatar: 'https://i.pravatar.cc/40?img=5',  role: 'user', roleLabel: prettyRole('user') },
+  ]
+}
+
+
+function saveNameOverride(email, name) {
+  try {
+    const m = JSON.parse(localStorage.getItem('flows_name_overrides') || '{}')
+    m[email] = name
+    localStorage.setItem('flows_name_overrides', JSON.stringify(m))
+  } catch {}
+}
+
+function getNameOverride(email) {
+  try {
+    const m = JSON.parse(localStorage.getItem('flows_name_overrides') || '{}')
+    return m[email]
+  } catch { return undefined }
+}
+
+
+// helper: username pulito a partire dal "Nome" (spazi -> punti)
+function makeUsernameFromName (s) {
+  return String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')         // es: "A Maxia" -> "a.maxia"
+    .replace(/[^a-z0-9_.-]/g, '') // caratteri sicuri
+    .slice(0, 32)
+}
+
+// --- approvazioni: chiama backend e aggiorna lista locale ---
+async function approve(u) {
+  // --- helpers locali sicuri ---
+  const emailLocalPart = s => String(s || '').toLowerCase().split('@')[0] || '';
+  const preferredNameFor = (email) => {
+    try {
+      const map = JSON.parse(localStorage.getItem('flows_preferred_names') || '{}');
+      return map[String(email || '').toLowerCase()] || '';
+    } catch { return ''; }
+  };
+  const makeUsername = (fullName) =>
+    String(fullName || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '.')           // spazi -> punti
+      .replace(/[^a-z0-9_.-]/g, '')   // solo caratteri sicuri
+      .slice(0, 32);
+
+  try {
+    // 1) Scegliamo il display name con priorità: override locale > u.display_name > u.name > local-part email
+    const display = preferredNameFor(u.email) || u.display_name || u.name || emailLocalPart(u.email);
+
+    // 2) Username tecnico derivato dal display name (niente email tagliata)
+    const suggestedUsername = makeUsername(display);
+
+    // 3) Ruolo: preferisci quello richiesto nella card, poi eventuale role già presente
+    const roleToApply = u.requested_role || u.role || 'user';
+
+    // 4) Chiamata BE: inviamo name = display per fissare il nome scelto
+    await api.approvalsApprove({
+      id: u.id,
+      name: display,
+      email: u.email,
+      username: suggestedUsername || undefined,
+      role: roleToApply,
+    });
+
+    // 5) Rimuovi dalla lista pending
+    pending.value = pending.value.filter(x => x.id !== u.id);
+
+    // 6) Pulisci SOLO l'override del ruolo; manteniamo il nome preferito
+    try {
+      const key = 'flows_preferred_roles';
+      const map = JSON.parse(localStorage.getItem(key) || '{}');
+      delete map[String(u.email || '').toLowerCase()];
+      localStorage.setItem(key, JSON.stringify(map));
+    } catch {}
+
+    // 7) Ricarica team e KPI
+    await loadTeam();
+    kpi.value.usersOnline = team.value.filter(x => x.active).length;
+    kpi.value.usersTotal  = team.value.length;
+
+  } catch (e) {
+    console.error(e);
+    alert('Impossibile approvare la richiesta. Riprova.');
+  }
+}
+
+
+// --- overrides ruolo: email -> role ---
+const ROLE_OVR_KEY = 'flows_role_overrides_v1';
+
+function readRoleOverrides() {
+  try { return JSON.parse(localStorage.getItem(ROLE_OVR_KEY) || '{}') } catch { return {} }
+}
+function saveRoleOverride(email, role) {
+  if (!email) return;
+  const map = readRoleOverrides();
+  map[email.toLowerCase()] = String(role || 'user').toLowerCase();
+  localStorage.setItem(ROLE_OVR_KEY, JSON.stringify(map));
+}
+function getRoleOverride(email) {
+  if (!email) return null;
+  const map = readRoleOverrides();
+  return map[email.toLowerCase()] || null;
+}
+function clearRoleOverride(email) {
+  if (!email) return;
+  const map = readRoleOverrides();
+  delete map[email.toLowerCase()];
+  localStorage.setItem(ROLE_OVR_KEY, JSON.stringify(map));
+}
+
+
+
+
+
+async function reject(u) {
+  pending.value = pending.value.filter(x => x.id !== u.id)
+}
+
+async function removeUser(u) {
+  const ok = confirm(`Eliminare definitivamente l'utente ${u.username || u.email || u.id}?`)
+  if (!ok) return
+
+  if (isSelf(u)) {
+    alert('Non puoi eliminare il tuo stesso account.')
+    return
+  }
+
+  const id = u?.id
+  if (id == null || String(id).trim() === '') {
+    alert('Impossibile eliminare: id utente mancante.')
+    return
+  }
+
+  try {
+    const res = await fetch(`/admin/api/users/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+
+    let payload = {}
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      payload = await res.json().catch(() => ({}))
+    } else {
+      payload = { message: await res.text().catch(() => '') }
+    }
+
+    if (!res.ok || payload?.ok !== true) {
+      const msg = payload?.message || `HTTP ${res.status}`
+      throw new Error(msg)
+    }
+
+    team.value = team.value.filter(x => x.id !== id)
+    kpi.value.usersTotal = Math.max(0, kpi.value.usersTotal - 1)
+    if (u.active) kpi.value.usersOnline = Math.max(0, kpi.value.usersOnline - 1)
+  } catch (e) {
+    console.error('DELETE user failed:', e)
+    alert(`Impossibile eliminare l’utente: ${e.message}`)
+  }
+}
+
+const PREFERRED_KEY = 'flows_preferred_names'
+function loadPreferredNames () {
+  try { return JSON.parse(localStorage.getItem(PREFERRED_KEY) || '{}') }
+  catch { return {} }
+}
+const preferredNames = ref(loadPreferredNames())
+
+function displayName(u) {
+  // priorità: display_name > name > override locale > fallback email local-part
+  const override = preferredNameFor(u?.email)
+  return u?.display_name || u?.name || override || (u?.email?.split?.('@')[0]) || 'Nuovo utente'
+}
+
+
+// opzionale: utility per aggiornare e persistere quando approvi
+function setPreferred(email, username) {
+  const mail = String(email || '').toLowerCase()
+  preferredNames.value = { ...preferredNames.value, [mail]: username }
+  try { localStorage.setItem(PREFERRED_KEY, JSON.stringify(preferredNames.value)) } catch {}
+}
+
+// se ascolti l’evento del modal:
+window.addEventListener('flows:new-pending', (e) => {
+  const { email, username } = e.detail || {}
+  if (email && username) setPreferred(email, username)
+})
 </script>
 
 
@@ -764,7 +1198,148 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   background: #10b981;
 }
 
+/* Classsi Pending Card */
 
+/* Card contenitore */
+.approvals-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.approvals-card .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.approvals-card .card-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+.approvals-card .muted { color: #64748b; }
+
+/* Lista pending */
+.pending-list {
+  list-style: none;
+  padding: 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Riga pending:
+   - grid: avatar | meta | azioni
+   - badge ruolo centrato in assoluto sopra la riga
+*/
+.pending-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.pending-item img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.pending-item .meta strong {
+  display: block;
+  font-size: .95rem;
+  color: #111827;
+}
+.pending-item .meta small {
+  color: #6b7280;
+}
+
+/* Badge ruolo centrato geometricamente */
+.pending-item .role-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;   /* non blocca i click sui bottoni */
+  z-index: 1;
+}
+
+.badge-role {
+  display: inline-block;
+  min-width: 84px;
+  text-align: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #eef2ff;
+  color: #3b82f6;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Azioni approva/rifiuta */
+.pending-item .actions {
+  justify-self: end;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.pending-item .ok,
+.pending-item .ko {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+}
+
+.pending-item .ok { background: #22c55e; }   /* verde */
+.pending-item .ok:hover { transform: translateY(-1px); filter: brightness(.97); }
+.pending-item .ok:active { transform: translateY(0); }
+
+.pending-item .ko { background: #ef4444; }   /* rosso */
+.pending-item .ko:hover { transform: translateY(-1px); filter: brightness(.97); }
+.pending-item .ko:active { transform: translateY(0); }
+
+.pending-item .ok:disabled,
+.pending-item .ko:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+/* Stato vuoto */
+.approvals-card .empty {
+  color: #64748b;
+  font-size: .9rem;
+  padding: 12px 14px 16px;
+}
+
+/* Responsive: su schermi piccoli lascia spazio ai bottoni */
+@media (max-width: 560px) {
+  .pending-item {
+    grid-template-columns: 36px 1fr auto;
+  }
+  .badge-role { min-width: 72px; font-weight: 600; }
+}
 
 </style>
 
