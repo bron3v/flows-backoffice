@@ -95,12 +95,84 @@
       <!-- /page-content -->
     </main>
   </div>
+
+  <button
+    class="fab-new-user"
+    @click="openModal"
+    :disabled="loading"
+    aria-label="Create new user"
+  >
+    <span v-if="!loading">New user</span>
+    <span v-else>Invio…</span>
+  </button>
+
+
+  <!-- Modal: nuova richiesta utente -->
+  <teleport to="body">
+    <div
+      v-if="show"
+      class="overlay"
+      @click.self="closeModal"
+      @keyup.esc="closeModal"
+      tabindex="-1"
+    >
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nu-ttl">
+        <h3 id="nu-ttl">Nuova richiesta utente</h3>
+
+        <form @submit.prevent="submit">
+          <div class="field">
+            <label>Nome</label>
+            <input
+              v-model.trim="name"
+              type="text"
+              placeholder="Nome e cognome"
+              required
+              :disabled="loading || ok"
+            />
+          </div>
+
+          <div class="field">
+            <label>Email</label>
+            <input
+              v-model.trim="email"
+              type="email"
+              placeholder="es. name@example.com"
+              required
+              :disabled="loading || ok"
+            />
+          </div>
+
+          <div class="field">
+            <label>Ruolo richiesto</label>
+            <select v-model="role" :disabled="loading || ok" required class="select">
+              <option value="user">User (base)</option>
+              <option value="user_manager">User manager</option>
+              <option value="logs_manager">Logs manager</option>
+              <option value="admin">Admin</option> <!-- ora NON è più disabilitato -->
+            </select>
+            <small class="hint">L’amministratore può confermare o modificare il ruolo richiesto.</small>
+          </div>
+
+
+          <p v-if="error" class="err">{{ error }}</p>
+          <p v-if="ok" class="ok">Richiesta inviata! Controlla la casella di posta.</p>
+
+          <div class="btns">
+            <button type="button" class="btn secondary" @click="closeModal" :disabled="loading">Annulla</button>
+            <button class="btn primary" :disabled="loading || ok">
+              {{ loading ? 'Invio…' : 'Invia richiesta' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </teleport>
 </template>
 
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useRouter, useRoute, RouterLink  } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import AppTopbar from '@/components/AppTopBar.vue'   
 import { api } from '@/utils/api'
@@ -263,10 +335,7 @@ function openProfile() {
   // esempio: router.push('/impostazioni')
 }
 
-function openModal() {
-  // apri il modal "New user" (gestisci loading se serve)
-  // loading.value = true; ...; loading.value = false
-}
+
 
 // ---- filtro locale team
 const filteredTeam = computed(() => {
@@ -286,6 +355,178 @@ onMounted(async () => {
   t = setInterval(() => loadKpi(), 15_000)
 })
 onBeforeUnmount(() => { if (t) clearInterval(t) })
+
+
+/* ──────────────────────────────────────────────
+   Stato modale + campi form
+   ────────────────────────────────────────────── */
+const show = ref(false)
+const name = ref('')
+const email = ref('')
+const role = ref('user')
+const error = ref('')
+const ok = ref(false)
+
+/* evita doppi invii dal pulsante */
+let inFlight = false
+
+const ALLOWED_ROLES = new Set(['user','user_manager','logs_manager','admin'])
+
+/* ──────────────────────────────────────────────
+   Helpers locali
+   ────────────────────────────────────────────── */
+function isEmail (s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '')
+}
+
+/* username tecnico dal NOME (non dalla mail) */
+function makeUsername (fullName) {
+  return String(fullName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '.')          // spazi -> punti
+    .replace(/[^a-z0-9_.-]/g, '')  // solo caratteri sicuri
+    .slice(0, 32)
+}
+
+/* preferenze locali per rendering lista pending */
+function savePreferredName(emailAddr, displayName) {
+  try {
+    const key = 'flows_preferred_names'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(emailAddr || '').toLowerCase()] = String(displayName || '').trim()
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+function savePreferredRole(emailAddr, wantedRole) {
+  try {
+    const key = 'flows_preferred_roles'
+    const map = JSON.parse(localStorage.getItem(key) || '{}')
+    map[String(emailAddr || '').toLowerCase()] = wantedRole
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch {}
+}
+
+/* semplice chiave antidual per evitare doppie richieste */
+function pendingKey(emailAddr) {
+  return `flows_req_${String(emailAddr || '').toLowerCase()}`
+}
+function markPending(emailAddr) {
+  try { sessionStorage.setItem(pendingKey(emailAddr), String(Date.now())) } catch {}
+}
+function wasJustSent(emailAddr) {
+  try {
+    const t = Number(sessionStorage.getItem(pendingKey(emailAddr)) || 0)
+    return t && Date.now() - t < 5000 // 5s: evita doppio click
+  } catch { return false }
+}
+
+/* reset e modale */
+function resetState () {
+  name.value = ''
+  email.value = ''
+  role.value = 'user'
+  loading.value = false
+  error.value = ''
+  ok.value = false
+  inFlight = false
+}
+function openModal () {
+  error.value = ''
+  ok.value = false
+  show.value = true
+  nextTick(() => document.querySelector('.modal input[type="text"]')?.focus())
+}
+function closeModal () {
+  show.value = false
+  resetState()
+}
+
+/* ──────────────────────────────────────────────
+   ACTION: submit dal pulsante "Crea"
+   ────────────────────────────────────────────── */
+async function submit () {
+  if (loading.value || inFlight || ok.value) return
+  error.value = ''
+  ok.value = false
+
+  // validazioni base
+  if (!name.value || !email.value) {
+    error.value = 'Compila tutti i campi'
+    return
+  }
+  if (!isEmail(email.value)) {
+    error.value = 'Email non valida'
+    return
+  }
+  if (!ALLOWED_ROLES.has(role.value)) {
+    error.value = 'Ruolo richiesto non valido'
+    return
+  }
+
+  const desiredDisplayName = name.value.trim()
+  const normalizedEmail   = email.value.trim().toLowerCase()
+
+  // username tecnico dal NOME (coerente con tuo helper)
+  const suggestedUsername = makeUsername(desiredDisplayName)
+
+  // antidual (evita doppio click entro 5s)
+  if (wasJustSent(normalizedEmail)) return
+
+  // salvataggi locali utili al rendering
+  savePreferredName(normalizedEmail, desiredDisplayName)
+  savePreferredRole(normalizedEmail, role.value)
+
+  const payload = {
+    name: desiredDisplayName,
+    email: normalizedEmail,
+    username: suggestedUsername,
+    requested_role: role.value
+  }
+
+  loading.value = true
+  inFlight = true
+  markPending(normalizedEmail)
+
+  try {
+    // 🔑 APPROVA SUBITO (CREA UTENTE + INVIA EMAIL CREDENZIALI DAL BACKEND)
+    // usa la funzione già presente in src/utils/api.js
+    const res = await api.approvalsApprove(payload)
+
+    if (!res?.ok) {
+      throw Object.assign(new Error(res?.message || 'approve_failed'), { status: 500, data: res })
+    }
+
+    // ricarica team/KPI per riflettere il nuovo utente creato
+    await loadTeam()
+
+    ok.value = true
+    // opzionale: messaggio più esplicito lato UI
+    // ok.value = 'Utente creato. Le credenziali sono state inviate via email.'
+
+    // chiudi dopo un attimo
+    setTimeout(closeModal, 700)
+
+  } catch (e) {
+    const msg = e?.data?.message || e?.message || ''
+    if (e?.status === 401) error.value = 'Sessione scaduta. Esegui di nuovo il login.'
+    else if (e?.status === 409) error.value = 'Utente già esistente per questa email/username'
+    else if (e?.status === 400) error.value = msg || 'Dati non validi'
+    else                        error.value = msg || 'Errore durante la creazione e l’invio email'
+  } finally {
+    loading.value = false
+    inFlight = false
+  }
+}
+
+
+
+function onKey (e) {
+  if (e.key === 'Escape' && show.value) closeModal()
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
 </script>
 
 
@@ -412,6 +653,117 @@ onBeforeUnmount(() => { if (t) clearInterval(t) })
 @supports (position: sticky){
   .topbar-card{ position: sticky; top: 0; z-index: 10; }
 }
+
+
+/* =============== MODAL =============== */
+.overlay{
+  position:fixed; inset:0;
+  background:rgba(2,6,23,.55);
+  display:grid; place-items:center;
+  padding:12px;
+  z-index:9999;
+}
+.modal{
+  width:min(520px,92vw);
+  background:#f5f7fb;
+  border-radius:20px;
+  box-shadow:0 22px 60px rgba(15,23,42,.28);
+  padding:28px 28px 22px;          /* più aria ai lati */
+  border:1px solid #e5e7eb;
+  overflow:visible;                 /* evita clipping dei menu */
+  position:relative; z-index:1010;
+}
+.modal h3{
+  margin:2px 0 16px;
+  font-size:1.35rem;
+  font-weight:800;
+  text-align:center;
+  color:#0f172a;
+  letter-spacing:.3px;
+}
+
+/* =============== FORM FIELDS =============== */
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.field label{color:#111;font-weight:600;}
+
+.input, .select, .field input, .field select{
+  box-sizing:border-box;            /* evita sbordo a 100% */
+  display:block;
+  width:100%;
+  padding:10px 12px;
+  border:1px solid #d5dbe1;
+  border-radius:10px;
+  background:#fff;
+  font-size:14px;
+  color:#111;
+}
+.field input::placeholder{color:#6b7280;}
+.field select option{color:#111;}
+.field select{margin-bottom:6px;}   /* aria sotto la tendina */
+
+.field input:-webkit-autofill{
+  -webkit-box-shadow:0 0 0 1000px #e8eef6 inset !important;
+  -webkit-text-fill-color:#0f172a !important;
+  caret-color:#0f172a;
+}
+
+/* hint & messages */
+.hint{color:#6b7280;font-size:12px;margin-top:4px;display:block;}
+.err{color:#dc2626;margin-top:4px;}
+.ok{color:#059669;margin-top:4px;}
+
+/* =============== BUTTONS =============== */
+.btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;}
+.btn{height:44px;padding:0 18px;border-radius:12px;border:none;cursor:pointer;font-weight:800;}
+.btn.secondary{background:#e2e8f0;color:#0f172a;}
+.btn.primary{background:#10b981;color:#fff;box-shadow:0 8px 24px rgba(16,185,129,.22);}
+.btn.primary:hover{filter:brightness(1.03);}
+.btn:disabled{opacity:.7;cursor:not-allowed;}
+
+.fab-new-user{
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 56px;              /* ⬅️ tondo */
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+
+  background: #10b981;      /* ⬅️ colore richiesto */
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0,0,0,.15);
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease, background .12s ease;
+}
+
+/* Se nel bottone c’è testo, lo nascondo visivamente e mostro un “+” via CSS */
+.fab-new-user { font-size: 0; }
+.fab-new-user::after{
+  content: '+';
+  font-size: 28px;
+  line-height: 1;
+}
+
+/* Hover/active/focus */
+.fab-new-user:hover{ box-shadow: 0 10px 24px rgba(0,0,0,.18); background: #0ea371; }
+.fab-new-user:active{ box-shadow: 0 6px 16px rgba(0,0,0,.12); background: #0c8c6d; }
+.fab-new-user:focus-visible{ outline: 3px solid rgba(16,185,129,.35); outline-offset: 2px; }
+
+.fab-new-user:disabled{
+  opacity: .6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.12);
+  background: #10b981;
+}
+
 
 
 </style>
