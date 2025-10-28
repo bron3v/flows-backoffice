@@ -451,17 +451,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 /* ---------- Helpers ruolo & normalizzazione ---------- */
 
 
-function cryptoRandomId() {
-  try {
-    const rnd = (globalThis.crypto && 'randomUUID' in globalThis.crypto)
-      ? globalThis.crypto.randomUUID()
-      : `x_${Math.random().toString(36).slice(2)}`;
-    return rnd;
-  } catch {
-    return `x_${Math.random().toString(36).slice(2)}`;
-  }
-}
-
 /* ---------- Preferenze locali: nome & ruolo ---------- */
 function savePreferredName(email, displayName) {
   try {
@@ -471,12 +460,7 @@ function savePreferredName(email, displayName) {
     localStorage.setItem(key, JSON.stringify(map))
   } catch {}
 }
-function preferredRoleFor(email) {
-  try {
-    const map = JSON.parse(localStorage.getItem(ROLE_PREF_KEY) || '{}')
-    return map[String(email || '').toLowerCase()] || ''
-  } catch { return '' }
-}
+
 function savePreferredRole(email, role) {
   try {
     const key = ROLE_PREF_KEY
@@ -485,32 +469,8 @@ function savePreferredRole(email, role) {
     localStorage.setItem(key, JSON.stringify(map))
   } catch {}
 }
-function clearPreferredRole(email) {
-  try {
-    const key = ROLE_PREF_KEY
-    const map = JSON.parse(localStorage.getItem(key) || '{}')
-    delete map[String(email || '').toLowerCase()]
-    localStorage.setItem(key, JSON.stringify(map))
-  } catch {}
-}
 
 
-function usernameFromDisplay(fullName) {
-  return String(fullName || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '.')          // spazi -> punti
-    .replace(/[^a-z0-9_.-]/g, '')  // caratteri sicuri
-    .slice(0, 32)
-}
-
-
-/* ---------- Bootstrap pending: merge server + locale ---------- */
-async function bootstrapPending() {
-  const serverPending = await loadPendingFromBackend()
-  const localPending  = loadPendingLocally()
-  pending.value = mergePending(localPending, serverPending)
-}
 
 
 /* ---------- Hook globali per pending ---------- */
@@ -585,10 +545,6 @@ function prettyRole(role) {
   })[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'User');
 }
 
-function displayRole(u) {
-  // fallback robusto: label → pretty(role) → 'User'
-  return u?.roleLabel || prettyRole(u?.role) || 'User'
-}
 
 function normalizePendingList(list) {
   return (list || []).map(p => {
@@ -721,10 +677,7 @@ async function loadTeam() {
     // accetta entrambi i payload
     const items = Array.isArray(data?.items) ? data.items
                  : Array.isArray(data?.users) ? data.users
-                 : []
-
-  
-
+                 : [] 
 team.value = items.map(u => {
   const override = getNameOverride(u.email)
   const rawRole = (u.role || u.user?.role || '').toString().toLowerCase()
@@ -965,96 +918,20 @@ window.addEventListener('flows:new-pending', (e) => {
 
 
 <style scoped>
-/* layout */
-.layout {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  min-height: 100vh;
-}
-.main {
-  padding: 24px;
-  background:  #eef2f7;          /* ✅ chiaro come HomeView */
-  color: #0b0b0c;
-}
+/* ==================== TOKENS & LAYOUT BASE ==================== */
 
-/* (rimosso) topbar: gestita da AppTopbar.vue */
+/* ==================== TOKENS & LAYOUT BASE ==================== */
+:root { --gutter: 24px; }
 
-/* cards & sections */
-.kpi {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.kpi-card,
-.card {
-  background: #ffffff;          /* ✅ card bianche */
-  border: 1px solid #e6e8ef;    /* ✅ bordo chiaro */
-  border-radius: 14px;
-  padding: 16px;
-}
-.kpi-title { font-size: 12px; opacity: .7; margin-bottom: 6px; color:#495061; }
-.kpi-value { font-size: 22px; font-weight: 700; color:#0b0b0c; }
-
-.approvals { margin-top: 16px; }
-.card-head {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
-}
-.muted { opacity: .7; font-size: 12px; color:#6b7280; }
-
-/* pending list */
-.pending-list { display: grid; gap: 8px; }
-.pending-item {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
-  background: #ffffff;          /* ✅ item bianchi */
-  border: 1px solid #e6e8ef;    /* ✅ bordo chiaro */
-  padding: 8px 10px; border-radius: 10px;
-}
-.pending-item img { width: 36px; height: 36px; border-radius: 50%; }
-.pending-item .meta { line-height: 1.1; }
-.pending-item .meta strong { display: block; color:#0b0b0c; }
-.pending-item .meta small { opacity: .7; color:#6b7280; }
-.pending-item .actions { display: flex; gap: 6px; }
-.pending-item .actions button {
-  width: 32px; height: 28px; border: 0; border-radius: 8px; cursor: pointer; font-weight: 700;
-}
-.pending-item .actions .ok { background: #e9f7ee; color: #177245; border: 1px solid #cfe9d6; }
-.pending-item .actions .ko { background: #fdecec; color: #8a1c1c; border: 1px solid #f6caca; }
-
-/* team grid */
-.team { margin-top: 16px; }
-.team-grid {
-  list-style: none; padding: 0; margin: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;
-}
-.user-card {
-  background: #ffffff;          /* ✅ user card bianche */
-  border: 1px solid #e6e8ef;
-  border-radius: 12px;
-  padding: 12px;
-  display: grid; gap: 10px;
-}
-.user-card.me { border-color: #2b5cff; box-shadow: 0 0 0 1px #2b5cff1f inset; }
-.uc-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
-.uc-head img { width: 42px; height: 42px; border-radius: 50%; }
-.name { font-weight: 700; display: flex; align-items: center; gap: 6px; color:#0b0b0c; }
-.email { font-size: 12px; opacity: .75; color:#6b7280; }
-.badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #e8eeff; color: #274690; }
-
-.uc-footer { display: flex; align-items: center; gap: 6px; font-size: 12px; opacity: .9; color:#495061; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.dot.on  { background: #10b981; }
-.dot.off { background: #9aa3b2; }
-
-
-/* 1) Grid senza gap e con larghezza sidebar coerente */
 .layout{
-  --sidebar-w: 240px;                 /* ⬅️ usa ESATTAMENTE la larghezza della tua AppSidebar */
+  --sidebar-w: 240px;                     /* allinea alla tua AppSidebar */
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
-  gap: 0;
+  min-height: 100vh;
+  background: #eef2f7;                    /* come Home */
+  overflow-x: clip;                        /* evita banda nera a dx */
 }
 
-/* 2) La sidebar occupa tutta la sua colonna (no bordo/ombra) */
 :deep(.sidebar){
   width: var(--sidebar-w) !important;
   min-width: var(--sidebar-w) !important;
@@ -1064,196 +941,135 @@ window.addEventListener('flows:new-pending', (e) => {
 }
 
 .main{
-  padding: 0 24px 24px 0;   /* top 0 | right 24 | bottom 24 | left 0 */
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--gutter) var(--gutter) 0;  /* 0 | 24 | 24 | 0 come Home */
+  color: #0f172a;
+  background: transparent;                  /* layout porta già il bg */
+  overflow-x: clip;
 }
 
-.topbar-card{
-  margin: 0;
-  width: 100%;
-  border-top-left-radius: 0;
-}
-
-/* elimina eventuali artefatti sub-pixel */
-.layout, .main { overflow-x: clip; }
-
-
-/* 🔧 anti-collasso: azzera il margine del primo titolo interno */
-.topbar-card :where(h1, .title){ margin-top: 0; }
-
-/* in caso di scoped CSS in Vue, usa deep selector: */
-:deep(.topbar-card h1){ margin-top: 0; }
-
-/* (opzionale) sticky come in home */
-@supports (position: sticky){
-  .topbar-card{ position: sticky; top: 0; z-index: 10; }
-}
-
-
-/* =============== MODAL =============== */
-.overlay{
-  position:fixed; inset:0;
-  background:rgba(2,6,23,.55);
-  display:grid; place-items:center;
-  padding:12px;
-  z-index:9999;
-}
-.modal{
-  width:min(520px,92vw);
-  background:#f5f7fb;
-  border-radius:20px;
-  box-shadow:0 22px 60px rgba(15,23,42,.28);
-  padding:28px 28px 22px;          /* più aria ai lati */
-  border:1px solid #e5e7eb;
-  overflow:visible;                 /* evita clipping dei menu */
-  position:relative; z-index:1010;
-}
-.modal h3{
-  margin:2px 0 16px;
-  font-size:1.35rem;
-  font-weight:800;
-  text-align:center;
-  color:#0f172a;
-  letter-spacing:.3px;
-}
-
-/* =============== FORM FIELDS =============== */
-.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
-.field label{color:#111;font-weight:600;}
-
-.input, .select, .field input, .field select{
-  box-sizing:border-box;            /* evita sbordo a 100% */
-  display:block;
-  width:100%;
-  padding:10px 12px;
-  border:1px solid #d5dbe1;
-  border-radius:10px;
-  background:#fff;
-  font-size:14px;
-  color:#111;
-}
-.field input::placeholder{color:#6b7280;}
-.field select option{color:#111;}
-.field select{margin-bottom:6px;}   /* aria sotto la tendina */
-
-.field input:-webkit-autofill{
-  -webkit-box-shadow:0 0 0 1000px #e8eef6 inset !important;
-  -webkit-text-fill-color:#0f172a !important;
-  caret-color:#0f172a;
-}
-
-/* hint & messages */
-.hint{color:#6b7280;font-size:12px;margin-top:4px;display:block;}
-.err{color:#dc2626;margin-top:4px;}
-.ok{color:#059669;margin-top:4px;}
-
-/* =============== BUTTONS =============== */
-.btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;}
-.btn{height:44px;padding:0 18px;border-radius:12px;border:none;cursor:pointer;font-weight:800;}
-.btn.secondary{background:#e2e8f0;color:#0f172a;}
-.btn.primary{background:#10b981;color:#fff;box-shadow:0 8px 24px rgba(16,185,129,.22);}
-.btn.primary:hover{filter:brightness(1.03);}
-.btn:disabled{opacity:.7;cursor:not-allowed;}
-
-.fab-new-user{
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 1000;
-  display: inline-flex;
+/* ==================== TOPBAR (AppTopbar.vue) ==================== */
+.app-topbar{
+  box-sizing: border-box;
+  height: 64px;
+  min-height: 64px;              /* anti-schiacciamento */
+  padding: 14px var(--gutter);   /* ⬅️ stesso padding interno */
+  display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 12px;
 
-  width: 56px;              /* ⬅️ tondo */
-  height: 56px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-
-  background: #10b981;      /* ⬅️ colore richiesto */
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0,0,0,.15);
-  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease, background .12s ease;
+  background: #fff;
+  color: #0b0b0c;
+  border-bottom: 1px solid #e6e8ef;
+  box-shadow: 0 1px 0 rgba(17,17,17,0.04);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-/* Se nel bottone c’è testo, lo nascondo visivamente e mostro un “+” via CSS */
-.fab-new-user { font-size: 0; }
-.fab-new-user::after{
-  content: '+';
-  font-size: 28px;
-  line-height: 1;
+.app-topbar.fullbleed{
+  margin: 0 calc(-1 * var(--gutter)) 16px 0; /* “sborda” a dx di 24px */
+  border-radius: 0;
+}
+.app-topbar > *{ flex-shrink: 0; }
+.app-topbar .app-topbar-title{ font-size: 20px; font-weight: 700; margin: 0; }
+.app-top-actions{ display:flex; align-items:center; gap:12px; min-width:0; }
+
+/* search pill identica */
+.app-search{
+  display:flex; align-items:center; gap:8px;
+  padding: 6px 10px;
+  height: 36px;
+  background:#f1f5f9;
+  border:1px solid #e6e8ef;     /* bordo leggero come le card */
+  border-radius: 10px;
+  box-shadow:none;
+  flex: 1 1 420px;               /* cresce senza schiacciare la barra */
+  max-width: 560px;
+  min-width: 210px;
+}
+.app-search svg{ width:18px; height:18px; color:#6b7280; }
+.app-search input{
+  border:0; outline:0; background:transparent; width:100%; min-width:0; color:inherit;
 }
 
-/* Hover/active/focus */
-.fab-new-user:hover{ box-shadow: 0 10px 24px rgba(0,0,0,.18); background: #0ea371; }
-.fab-new-user:active{ box-shadow: 0 6px 16px rgba(0,0,0,.12); background: #0c8c6d; }
-.fab-new-user:focus-visible{ outline: 3px solid rgba(16,185,129,.35); outline-offset: 2px; }
 
-.fab-new-user:disabled{
-  opacity: .6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,.12);
-  background: #10b981;
+/* ==================== KPI ==================== */
+.kpi {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-/* Classsi Pending Card */
+.kpi-val {
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #0f172a;
+}
 
-/* Card contenitore */
-.approvals-card {
+/* icone (facoltative, coerenti) */
+.kpi-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #eef2ff;
+  position: relative;
+}.kpi-icon.users{ background:#eef2ff; }
+.kpi-icon.orders{ background:#ecfeff; }
+.kpi-icon.products { background: #f0fdf4; position: relative; }
+.kpi-icon.products::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: #16a34a;
+  pointer-events: none;
+}
+
+/* ==================== CARDS & HEADERS ==================== */
+.card {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
 }
-
-.approvals-card .card-head {
+.card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
   border-bottom: 1px solid #e5e7eb;
 }
+.card-head h3 { margin: 0; font-size: 1rem; color: #6b7280;}
+.muted{ color:#6b7280; }
 
-.approvals-card .card-head h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: #0f172a;
-}
-.approvals-card .muted { color: #64748b; }
-
-/* Lista pending */
-.pending-list {
-  list-style: none;
-  padding: 12px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* Riga pending:
-   - grid: avatar | meta | azioni
-   - badge ruolo centrato in assoluto sopra la riga
-*/
-.pending-item {
-  position: relative;
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #fff;
+/* ==================== LISTA PENDING ==================== */
+.pending-list{ list-style:none; margin:0; padding:0; }
+.pending-item{
+  display:grid;
+  grid-template-columns: 40px 1fr auto auto; /* avatar | meta | ruolo | azioni */
+  align-items:center;
+  gap:12px;
+  padding:8px 12px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
 }
 
 .pending-item img {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  object-fit: cover;
+  object-fit:cover;
 }
 
 .pending-item .meta strong {
@@ -1261,85 +1077,204 @@ window.addEventListener('flows:new-pending', (e) => {
   font-size: .95rem;
   color: #111827;
 }
+
 .pending-item .meta small {
   color: #6b7280;
 }
-
-/* Badge ruolo centrato geometricamente */
-.pending-item .role-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;   /* non blocca i click sui bottoni */
-  z-index: 1;
+/* badge ruolo centrato geometricamente */
+.pending-item .role-center{
+  position: static !important;  /* annulla left/top precedenti */
+  inset: auto !important;
+  transform: none !important;
+  justify-self: center;         /* centra nella colonna */
+  pointer-events: auto;
+  z-index: auto;
 }
 
-.badge-role {
-  display: inline-block;
-  min-width: 84px;
-  text-align: center;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: #eef2ff;
-  color: #3b82f6;
-  font-weight: 700;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
+.badge-role{
+  padding:4px 10px;
+  border-radius:9999px;
+  background:#eef2ff;
+  color:#3b82f6;  
+  font-weight:600;
+  font-size:12px;
+  line-height:1;
+  white-space:nowrap;
+  min-width:72px;
+  text-align:center;
 }
-
-/* Azioni approva/rifiuta */
-.pending-item .actions {
+.pending-item .actions{
   justify-self: end;
-  display: inline-flex;
+  display: flex;
   gap: 8px;
 }
 
-.pending-item .ok,
-.pending-item .ko {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+.icon-btn {
   border: none;
+  background: #f1f5f9;
+  padding: 6px 8px;
+  border-radius: 8px;
   cursor: pointer;
-  color: #fff;
-  font-weight: 800;
-  display: grid;
-  place-items: center;
+  margin-left: 6px;
+}
+.icon-btn.green { color: #16a34a; }
+.icon-btn.red   { color: #ef4444; }
+.icon-btn:hover { filter: brightness(.96); }
+
+.pending-item .ok,
+.pending-item .ko{
+  width:32px; height:32px;
+  border-radius:10px; border:0;
+  cursor:pointer; color:#fff; font-weight:800;
+  display:grid; place-items:center;
   transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
 }
+.pending-item .ok{ background:#22c55e; }
+.pending-item .ok:hover{ transform:translateY(-1px); filter:brightness(.97); }
+.pending-item .ko{ background:#ef4444; }
+.pending-item .ko:hover{ transform:translateY(-1px); filter:brightness(.97); }
 
-.pending-item .ok { background: #22c55e; }   /* verde */
-.pending-item .ok:hover { transform: translateY(-1px); filter: brightness(.97); }
-.pending-item .ok:active { transform: translateY(0); }
-
-.pending-item .ko { background: #ef4444; }   /* rosso */
-.pending-item .ko:hover { transform: translateY(-1px); filter: brightness(.97); }
-.pending-item .ko:active { transform: translateY(0); }
-
-.pending-item .ok:disabled,
-.pending-item .ko:disabled {
-  opacity: .6;
-  cursor: not-allowed;
-  transform: none;
-  filter: none;
+/* stato vuoto */
+.approvals-card .empty{
+  color:#64748b; font-size:.9rem; padding:12px 14px 16px;
 }
 
-/* Stato vuoto */
-.approvals-card .empty {
-  color: #64748b;
-  font-size: .9rem;
-  padding: 12px 14px 16px;
+/* ==================== TEAM GRID (carte utenti) ==================== */
+/* === Team: versione tabellare identica alla prima pagina === */
+.team{ margin-top:16px; }
+
+/* Card contenitore */
+.card{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  overflow:hidden;
 }
 
-/* Responsive: su schermi piccoli lascia spazio ai bottoni */
-@media (max-width: 560px) {
-  .pending-item {
-    grid-template-columns: 36px 1fr auto;
-  }
-  .badge-role { min-width: 72px; font-weight: 600; }
+/* Intestazione card (titolo + “2 membri”) */
+.card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:1px solid #e5e7eb;
 }
+.card-head h3{ margin:0; font-size:1rem; color:#6b7280; }
+.muted{ color:#6b7280; }
 
+/* Tabella */
+.table{ width:100%; border-collapse:separate; border-spacing:0; }
+.table thead th{
+  text-align:left;
+  font-size:.9rem;
+  color:#64748b;
+  font-weight:600;
+  padding:12px 14px;
+  background:#f8fafc;
+  border-bottom:1px solid #e5e7eb;
+}
+.table tbody td{
+  padding:12px 14px;
+  border-bottom:1px solid #f1f5f9;
+  vertical-align:middle;
+  background:#fff;
+}
+.table tbody tr:last-child td{ border-bottom:none; }
+
+/* Cella “Utente” con avatar + nome */
+.person{ display:flex; align-items:center; gap:10px; }
+.person img{ width:34px; height:34px; border-radius:50%; object-fit:cover; }
+.name{ font-weight:600; color:#0f172a; }   /* come in prima pagina */
+.small{ font-size:.85rem; }
+.t-right{ text-align:right; }
+
+/* Badge di stato (Online/Offline) */
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:.75rem;
+  font-weight:700;
+}
+.badge.success{ background:#ecfdf5; color:#16a34a; } /* Online */
+.badge.danger { background:#fef2f2; color:#ef4444; } /* Offline */
+
+/* Pulsante azione a destra (icona cestino ecc.) */
+.icon-btn{
+  border:none;
+  background:#f1f5f9;
+  padding:6px 8px;
+  width:28px; height:28px;
+  border-radius:8px;
+  cursor:pointer;
+  color:#ef4444;         /* icona rossa come nello shot */
+  display:inline-grid; place-items:center;
+}
+.icon-btn:hover{ filter:brightness(.96); }
+
+
+/* ==================== MODAL & BUTTONS (coerenti) ==================== */
+.overlay{
+  position:fixed; inset:0; background:rgba(2,6,23,.55);
+  display:grid; place-items:center; padding:12px; z-index:9999;
+}
+.modal{
+  width:min(520px,92vw);
+  background:#f5f7fb; border-radius:20px; border:1px solid #e5e7eb;
+  box-shadow:0 22px 60px rgba(15,23,42,.28);
+  padding:28px 28px 22px; position:relative; z-index:1010; overflow:visible;
+}
+.modal h3{ margin:2px 0 16px; font-size:1.35rem; font-weight:800; text-align:center; color:#0f172a; letter-spacing:.3px; }
+
+.field{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.field label{ color:#111; font-weight:600; }
+.input, .select, .field input, .field select{
+  box-sizing:border-box; width:100%;
+  padding:10px 12px; border:1px solid #d5dbe1; border-radius:10px; background:#fff; font-size:14px; color:#111;
+}
+.field input::placeholder{ color:#6b7280; }
+.field select{ margin-bottom:6px; }
+.field input:-webkit-autofill{
+  -webkit-box-shadow:0 0 0 1000px #e8eef6 inset !important;
+  -webkit-text-fill-color:#0f172a !important; caret-color:#0f172a;
+}
+.hint{ color:#6b7280; font-size:12px; margin-top:4px; display:block; }
+.err{ color:#dc2626; margin-top:4px; }
+.ok{ color:#059669; margin-top:4px; }
+
+.btns{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; }
+.btn{ height:44px; padding:0 18px; border-radius:12px; border:none; cursor:pointer; font-weight:800; }
+.btn.secondary{ background:#e2e8f0; color:#0f172a; }
+.btn.primary{ background:#10b981; color:#fff; box-shadow:0 8px 24px rgba(16,185,129,.22); }
+.btn.primary:hover{ filter:brightness(1.03); }
+.btn:disabled{ opacity:.7; cursor:not-allowed; }
+
+.fab-new-user{
+  position: fixed; right: 24px; bottom: 24px; z-index: 1000;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:56px; height:56px; padding:0; border-radius:50%; border:none;
+  background:#10b981; color:#fff; font-weight:700; cursor:pointer;
+  box-shadow:0 6px 20px rgba(0,0,0,.15);
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease, background .12s ease;
+  font-size:0;
+}
+.fab-new-user::after{ content:'+'; font-size:28px; line-height:1; }
+.fab-new-user:hover{ box-shadow:0 10px 24px rgba(0,0,0,.18); background:#0ea371; }
+.fab-new-user:active{ box-shadow:0 6px 16px rgba(0,0,0,.12); background:#0c8c6d; }
+.fab-new-user:focus-visible{ outline:3px solid rgba(16,185,129,.35); outline-offset:2px; }
+.fab-new-user:disabled{ opacity:.6; cursor:not-allowed; transform:none; box-shadow:0 6px 16px rgba(0,0,0,.12); background:#10b981; }
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 1100px){
+  .kpi{ grid-template-columns: 1fr; }
+}
+@media (max-width: 768px){
+  .app-search{ flex:1 1 220px; }
+}
+@media (max-width: 560px){
+  .pending-item{ grid-template-columns: 36px 1fr auto; }
+  .badge-role{ min-width:72px; font-weight:600; }
+}
 </style>
+
 
