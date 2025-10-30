@@ -10,7 +10,7 @@
     <nav class="menu">
       <RouterLink to="/" class="item" :class="{ active: $route.path==='/' }">Dashboard</RouterLink>
       <RouterLink to="/utenti" class="item" :class="{ active: $route.path.startsWith('/utenti') }">Utenti</RouterLink>
-      <RouterLink to="/tabelle" class="item" :class="{ active: $route.path.startsWith('/tabelle') }">Tabelle</RouterLink>
+      <RouterLink to="/logs" class="item" :class="{ active: $route.path.startsWith('/logs') }">Logs</RouterLink>
       <RouterLink to="/moduli" class="item" :class="{ active: $route.path.startsWith('/moduli') }">Moduli</RouterLink>
       <RouterLink to="/impostazioni" class="item" :class="{ active: $route.path.startsWith('/impostazioni') }">Impostazioni</RouterLink>
 

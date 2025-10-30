@@ -13,6 +13,7 @@ const router = createRouter({
     { path: '/utenti', name: 'utenti', component: Users, meta: { requiresAuth: true } }, // 👈
     // opzionale: compat per vecchi link /users
     { path: '/users', redirect: '/utenti' },
+    { path: '/logs', name: 'logs', component: () => import('@/views/Logsview.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),

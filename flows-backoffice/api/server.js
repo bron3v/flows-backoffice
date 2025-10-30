@@ -222,7 +222,7 @@ app.post('/auth/logout', requireLogin, async (req, res) => {
            SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
          WHERE id = $2`,
         [now, uid]
-      ).catch(() => {}); // non bloccare il logout per un errore qui
+      ).catch(() => {}); 
     }
 
     // distruggi la sessione e pulisci il cookie
