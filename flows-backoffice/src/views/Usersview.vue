@@ -90,7 +90,15 @@
 
                 <div class="uc-footer">
                   <span class="dot" :class="u.active ? 'on' : 'off'"></span>
-                  <span class="status">{{ u.active ? 'online' : 'offline' }}</span>
+
+                  <!-- stato -->
+                  <span class="status" v-if="u.active">online</span>
+                  <span class="status" v-else>offline</span>
+
+                  <!-- ultimo accesso solo se offline -->
+                  <span v-if="!u.active" class="chip offline">
+                    Ultimo accesso: {{ timeAgo(u.lastSeenTs) }}
+                  </span>
                 </div>
               </li>
             </ul>
@@ -690,6 +698,7 @@ team.value = items.map(u => {
     role: rawRole || 'user',                 // valore tecnico
     roleLabel: prettyRole(rawRole || 'user'),// etichetta da mostrare
     avatar: u.avatar,
+    lastSeenTs: Number(u.last_seen_ts || 0)
   }
 })
 
@@ -742,6 +751,23 @@ function getNameOverride(email) {
   } catch { return undefined }
 }
 
+// utils time-ago minimale
+function timeAgo(ms) {
+  if (!ms || ms <= 0) return 'mai';
+  const diff = Date.now() - ms;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'pochi secondi fa';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min fa`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} h fa`;
+  const d = Math.floor(hr / 24);
+  if (d < 30) return `${d} g fa`;
+  const m = Math.floor(d / 30);
+  if (m < 12) return `${m} mesi fa`;
+  const y = Math.floor(m / 12);
+  return `${y} anni fa`;
+}
 
 // helper: username pulito a partire dal "Nome" (spazi -> punti)
 function makeUsernameFromName (s) {
@@ -1275,6 +1301,14 @@ window.addEventListener('flows:new-pending', (e) => {
   .pending-item{ grid-template-columns: 36px 1fr auto; }
   .badge-role{ min-width:72px; font-weight:600; }
 }
+
+.user-row { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }
+.meta .name { color:#0f172a; }
+.meta .role { color:#6b7280; }
+.chip { font-size:12px; padding:4px 8px; border-radius:9999px; }
+.chip.online { background:#e8f7ee; color:#1f9254; }
+.chip.offline { background:#f3f4f6; color:#374151; }
+
 </style>
 
 

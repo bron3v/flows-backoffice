@@ -34,6 +34,20 @@ pool.on('connect', (client) => {
   client.query('SET search_path TO public')
 })
 
+// 👇 QUI: assicurati la colonna last_seen_ts
+;(async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE public.users
+      ADD COLUMN IF NOT EXISTS last_seen_ts BIGINT
+    `)
+    console.log('[db] users.last_seen_ts ok')
+  } catch (e) {
+    console.warn('[db] cannot ensure users.last_seen_ts:', e.message)
+  }
+})()
+
+
 // (facoltativo) export per altri moduli
 module.exports = { pool }
 
@@ -97,22 +111,37 @@ app.use(session({
 // ---------- Heartbeat lastSeen (max 1/min) ----------
 // ---------- Heartbeat lastSeen (aggiorna SUBITO al primo hit, poi max 1/min) ----------
 // Heartbeat: aggiorna lastSeenTs max 1 volta ogni 15s
+// Heartbeat: aggiorna lastSeenTs max 1 volta ogni 15s
 app.use((req, res, next) => {
   if (!req.session) return next()
-  const now = Date.now()
+  const now  = Date.now()
   const last = Number(req.session.lastSeenTs || 0)
 
-  // aggiorna solo se è passato un po' di tempo per non stressare il DB
   if (now - last >= 15_000) {
     req.session.lastSeenTs = now
-    // con connect-pg-simple basta toccare la sessione: il save persiste `sess`
-    req.session.save(() => next())
-  } else {
-    next()
+    // salva la sessione
+    req.session.save(() => {})
+
+    // se l'utente è noto, aggiorna anche la tabella users (best effort, no await)
+    const uid = req.session.userId
+    if (uid) {
+      pool.query(
+        `UPDATE public.users
+           SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
+         WHERE id = $2`,
+        [now, uid]
+      ).catch(() => {})
+    }
   }
+  next()
 })
 
 
+// subito dopo gli altri endpoint "auth/*"
+app.post('/me/ping', requireLogin, (req, res) => {
+  // il middleware sopra aggiorna req.session.lastSeenTs
+  res.json({ ok: true, at: Date.now() })
+})
 
 // ---------- Log richieste (dev) ----------
 app.use((req, _res, next) => {
@@ -120,57 +149,97 @@ app.use((req, _res, next) => {
   next()
 })
 
+
 // ---------- Auth ----------
 app.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body || {}
+    const { username, password } = req.body || {};
     if (!username || !password) {
-      return res.status(400).json({ ok: false, message: 'missing_fields' })
+      return res.status(400).json({ ok: false, message: 'missing_fields' });
     }
 
-    const user = await findUserByUsername(username)
-    const ok = user && await checkPassword(user, password)
-    if (!ok) return res.status(200).json({ ok: false, message: 'invalid_credentials' })
+    const user = await findUserByUsername(username);
+    const ok = user && await checkPassword(user, password);
+    if (!ok) {
+      // mantieni compatibilità col FE: 200 + invalid_credentials
+      return res.status(200).json({ ok: false, message: 'invalid_credentials' });
+    }
 
-    // sessione completa di ruolo
-    req.session.loggedIn = true
-    req.session.userId   = user.id
-    req.session.user     = { id: user.id, username: user.username, role: user.role }
+    // --- sessione utente ---
+    req.session.loggedIn = true;
+    req.session.userId   = user.id;
+    req.session.user     = { id: user.id, username: user.username, role: user.role };
 
-    // best-effort lastSeen (lascia com’è il tuo codice, non influisce sul ruolo)
-    const now = Date.now()
-    req.session.lastSeenTs = String(now)
-    req.session.save(err => {
-      if (!err) {
-        pool.query(
-          `UPDATE public.session
-             SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
-                      to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
-           WHERE sid = $2`,
-          [now, req.sessionID]
-        ).catch(()=>{})
-      }
-    })
+    // --- last seen: salva subito (ms epoch) ---
+    const now = Date.now();
+    req.session.lastSeenTs = now;
 
-    // >>> QUI: ritorna anche role
+    // salva la sessione; non bloccare la risposta se fallisce il save asincrono
+    req.session.save(() => {});
+
+    // persisti anche su users.last_seen_ts (così resta visibile anche dopo logout)
+    pool.query(
+      `UPDATE public.users
+         SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
+       WHERE id = $2`,
+      [now, user.id]
+    ).catch(() => { /* best-effort */ });
+
+    // (opzionale) se ti serve ancora avere un campo "lastSeen" testuale nella sessione pg:
+    // pool.query(
+    //   `UPDATE public.session
+    //      SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
+    //               to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
+    //    WHERE sid = $2`,
+    //   [now, req.sessionID]
+    // ).catch(()=>{});
+
+    // risposta (mantieni shape attuale)
     return res.json({
       ok: true,
       user: { id: user.id, username: user.username, role: user.role }
-    })
+      // volendo puoi aggiungere: last_seen_ts: now
+    });
+
   } catch (err) {
-    console.error('[/auth/login] error:', err)
-    return res.status(500).json({ ok: false, message: 'server_error' })
+    console.error('[/auth/login] error:', err);
+    return res.status(500).json({ ok: false, message: 'server_error' });
   }
-})
+});
 
 
-app.post('/auth/logout', (req, res) => {
-  req.session?.destroy(err => {
-    res.clearCookie('connect.sid', { path: '/' })
-    if (err) return res.status(500).json({ ok: false, message: 'logout_error' })
-    res.json({ ok: true })
-  })
-})
+
+// ---------- Auth: logout ----------
+app.post('/auth/logout', requireLogin, async (req, res) => {
+  try {
+    const uid = req.session?.userId || null;
+    const now = Date.now();
+
+    // best-effort: persisti l’ultimo accesso anche se la sessione sta per sparire
+    if (uid) {
+      await pool.query(
+        `UPDATE public.users
+           SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
+         WHERE id = $2`,
+        [now, uid]
+      ).catch(() => {}); // non bloccare il logout per un errore qui
+    }
+
+    // distruggi la sessione e pulisci il cookie
+    req.session.destroy(err => {
+      res.clearCookie('connect.sid', { path: '/' });
+      if (err) {
+        console.error('[/auth/logout] destroy error:', err);
+        return res.status(500).json({ ok: false, message: 'logout_error' });
+      }
+      return res.json({ ok: true });
+    });
+  } catch (e) {
+    console.error('[/auth/logout] error:', e);
+    return res.status(500).json({ ok: false, message: 'server_error' });
+  }
+});
+
 
 app.get('/auth/ping', (req, res) => {
   req.session.ping = (req.session.ping || 0) + 1
@@ -249,13 +318,15 @@ adminApi.get('/users/me', (req, res) => {
 })
 
 // Lista utenti + flag online (definizione coerente con stats)
+// Lista utenti: "online" da sessioni attive, "ultimo accesso" da users.last_seen_ts
 adminApi.get('/users', async (_req, res) => {
   try {
     const sql = `
       SELECT
         u.id,
         u.username,
-        u.role,              -- <<< aggiunto
+        u.role,
+        COALESCE(u.last_seen_ts, 0) AS last_seen_ts,
         EXISTS (
           SELECT 1
           FROM public.session s
@@ -267,14 +338,15 @@ adminApi.get('/users', async (_req, res) => {
         ) AS online
       FROM public.users u
       ORDER BY online DESC, username ASC;
-    `
-    const { rows } = await pool.query(sql)
-    res.json({ ok: true, items: rows })
+    `;
+    const { rows } = await pool.query(sql);
+    res.json({ ok: true, items: rows });
   } catch (e) {
-    console.error('[/admin/api/users] error:', e)
-    res.status(500).json({ ok: false, message: 'server_error' })
+    console.error('[/admin/api/users] error:', e);
+    res.status(500).json({ ok: false, message: 'server_error' });
   }
-})
+});
+
 
 
 // DELETE utente per id – no self-delete
