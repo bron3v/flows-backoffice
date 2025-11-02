@@ -198,13 +198,47 @@ document.addEventListener('visibilitychange', () => {
 
 // filtro client-side
 const filteredTeam = computed(() => {
-  const term = q.value.trim().toLowerCase()
-  if (!term) return team.value
-  return team.value.filter(m =>
-    String(m.username || '').toLowerCase().includes(term) ||
-    String(m.name || '').toLowerCase().includes(term)
-  )
-})
+  const term = q.value.trim().toLowerCase();
+
+  // id/username dell'utente di sessione
+  const me = sessionUser.value;
+  const meId = me?.id != null ? String(me.id) : null;
+  const meUser = team.value.find(u =>
+    (meId && String(u.id) === meId) ||
+    (!!me?.username && String(u.username || '').toLowerCase() === String(me.username).toLowerCase())
+  );
+
+  // 1) filtra per ricerca (escludendo me: lo aggiungiamo sopra)
+  let others = team.value.filter(u => {
+    const isMe =
+      (meId && String(u.id) === meId) ||
+      (!!me?.username && String(u.username || '').toLowerCase() === String(me.username).toLowerCase());
+    if (isMe) return false;
+
+    if (!term) return true;
+    return (
+      String(u.username || '').toLowerCase().includes(term) ||
+      String(u.name || '').toLowerCase().includes(term)
+    );
+  });
+
+  // 2) ordina per ultimo accesso (null in fondo)
+  others.sort((a, b) => {
+    const ta = a.lastSeenTs ?? -1;
+    const tb = b.lastSeenTs ?? -1;
+    return tb - ta; // desc
+  });
+
+  // 3) costruisci la lista finale: me sempre primo (se presente), poi gli altri
+  const result = [];
+  if (meUser) result.push(meUser);
+  result.push(...others);
+
+  // 4) limita a 5 mantenendo "me" in testa
+  return result.slice(0, 5);
+});
+
+
 
 // --- helper persistenza pending (solo FE) ---
 function savePendingLocally(list) {
@@ -285,6 +319,14 @@ function mergePending(localList, serverList) {
     if (!byKey.has(key)) byKey.set(key, x)
   })
   return [...byKey.values()]
+}
+
+function toTs(v) {
+  if (v == null) return null;
+  // accetta number (epoch ms/s) o stringhe ISO
+  if (typeof v === 'number') return v > 1e12 ? v : v * 1000;
+  const n = Date.parse(String(v));
+  return Number.isNaN(n) ? null : n;
 }
 
 
@@ -372,17 +414,34 @@ async function loadTeam() {
 team.value = items.map(u => {
   const override = getNameOverride(u.email)
   const rawRole = (u.role || u.user?.role || '').toString().toLowerCase()
+
+  // prendi il timestamp dal primo campo disponibile tra quelli comuni
+  const lastSeenTs =
+    toTs(u.lastSeenTs) ??
+    toTs(u.last_seen_ts) ??
+    toTs(u.lastSeen) ??
+    toTs(u.last_seen) ??
+    toTs(u.lastLoginAt) ??
+    toTs(u.last_login_at) ??
+    toTs(u.last_login) ??
+    toTs(u.lastActiveAt) ??
+    toTs(u.last_active_at) ??
+    toTs(u.heartbeat) ??
+    toTs(u.updated_at) ?? null;
+
   return {
     id: u.id ?? null,
     username: u.username ?? null,
     name: override || u.name || u.username || (u.email && String(u.email).split('@')[0]) || 'Utente',
     email: u.email || '',
     active: !!(u.online ?? u.active),
-    role: rawRole || 'user',                 // valore tecnico
-    roleLabel: prettyRole(rawRole || 'user'),// etichetta da mostrare
+    role: rawRole || 'user',
+    roleLabel: prettyRole(rawRole || 'user'),
     avatar: u.avatar,
+    lastSeenTs, 
   }
 })
+
 
 
 
