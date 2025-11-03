@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 const Home  = () => import('../views/Homeview.vue')
 const Login = () => import('../views/Loginview.vue')
 const Users = () => import('../views/Usersview.vue')
+const AccountRequest = () => import('../views/AccountRequestview.vue') // 👈 NEW
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,6 +15,10 @@ const router = createRouter({
     // opzionale: compat per vecchi link /users
     { path: '/users', redirect: '/utenti' },
     { path: '/logs', name: 'logs', component: () => import('@/views/Logsview.vue') },
+
+    // 👇 NEW: pagina richiesta account (pubblica, senza requiresAuth)
+    { path: '/account-request', name: 'account-request', component: AccountRequest },
+
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
   scrollBehavior: () => ({ top: 0 }),
@@ -72,6 +77,5 @@ router.beforeEach(async (to, from, next) => {
 
   return next()
 })
-
 
 export default router;

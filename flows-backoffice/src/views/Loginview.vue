@@ -39,6 +39,15 @@
 
           <p v-if="error" style="margin-top:10px;color:#b00020">{{ error }}</p>
         </form>
+
+        <!-- CTA in basso -->
+        <p class="signup-cta">
+          Non hai un account?
+          <RouterLink class="cta-link" to="/account-request">Richiedilo.</RouterLink>
+          <!-- In alternativa, se usi la route nominata:
+          <RouterLink class="cta-link" :to="{ name: 'account-request' }">Richiedilo.</RouterLink>
+          -->
+        </p>
       </div>
     </section>
   </main>
@@ -46,7 +55,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { RouterLink, useRouter, useRoute } from 'vue-router'
 import { api } from '@/utils/api'
 import { markLoggedIn } from '@/router'
 
@@ -74,33 +83,26 @@ async function doLogin() {
     return
   }
 
-  // reset eventuale ruolo vecchio
   try { sessionStorage.removeItem('flows_role') } catch {}
 
   loading.value = true
   try {
-    // 1) login
     const res = await api.login(user, pass) // POST /auth/login
     if (!(res?.ok)) {
       error.value = 'Credenziali errate'
       return
     }
 
-    // 2) leggi ruolo SOLAMENTE da /me (fonte autoritativa)
     let me
     try { me = await api.me() } catch {}
-    const role = String(
-      me?.role ?? me?.user?.role ?? res?.user?.role ?? ''
-    ).toLowerCase()
+    const role = String(me?.role ?? me?.user?.role ?? res?.user?.role ?? '').toLowerCase()
 
-    // 3) blocca ruolo "user" o ruolo mancante
     if (!role || role === 'user') {
       error.value = 'Accesso negato: il tuo ruolo non consente l’accesso al backoffice. Contatta un amministratore.'
       try { await api.logout?.() } catch {}
       return
     }
 
-    // 4) ok: salva stato e vai
     markLoggedIn()
     try { sessionStorage.setItem('flows_role', role) } catch {}
     router.replace(sanitizeRedirect(route.query.redirect))
@@ -110,11 +112,7 @@ async function doLogin() {
     loading.value = false
   }
 }
-
-
 </script>
-
-
 
 <style scoped>
 /* Sfondo esterno */
@@ -152,7 +150,7 @@ async function doLogin() {
 
 .login-card {
   width: min(380px, 90vw);
-  height: min(380px, 90vw);
+  height: min(420px, 92vw);
   background: #ececef;
   border-radius: 16px;
   box-shadow: 0 10px 24px rgba(0,0,0,.16);
@@ -192,6 +190,20 @@ async function doLogin() {
 }
 .btn:hover { filter: brightness(0.96); }
 .btn:active { transform: translateY(1px); }
+
+/* CTA in basso sotto al form */
+.signup-cta{
+  margin-top: 12px;
+  font-size: 13px;
+  color: #0b0b0c;
+}
+.cta-link{
+  color: #1cb5a9;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cta-link:hover{ filter: brightness(0.95); }
 
 @media (max-width: 720px) {
   #brand-name { font-size: clamp(28px, 8vw, 48px); }
