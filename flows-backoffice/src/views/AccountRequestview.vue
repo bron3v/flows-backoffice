@@ -14,7 +14,7 @@
             <input
               v-model.trim="usernameOrEmail"
               type="text"
-              placeholder="Username o e-mail"
+              placeholder="Username"
               required
               class="input"
               autocomplete="username"
@@ -113,15 +113,7 @@ function makeUsername (fullName) {
     .slice(0, 32)
 }
 
-// costruisco un display name di fallback:
-// - se l'utente inserisce un nome cognome nel primo campo, uso quello
-// - altrimenti uso la parte locale dell'email
-function makeDisplayName (userField, emailField) {
-  const hasSpaces = /\s/.test(String(userField || ''))
-  if (hasSpaces) return String(userField).trim().replace(/\s+/g, ' ')
-  const local = String(emailField || '').split('@')[0] || 'utente'
-  return local.replace(/[._-]+/g, ' ')
-}
+
 
 // opzionale: salvo preferenze locali come fa la modale (name/role per rendering liste pending)
 function savePreferredName(emailAddr, displayName) {
@@ -163,8 +155,8 @@ async function submitRequest () {
   }
 
   // normalizzo i dati come nella modale
-  const displayName = makeDisplayName(userField, emailField)
-  const suggestedUsername = makeUsername(displayName)
+  const displayName = userField
+  const suggestedUsername = makeUsername(userField)
 
   savePreferredName(emailField, displayName)
   savePreferredRole(emailField, wantedRole)
