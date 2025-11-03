@@ -4,20 +4,22 @@ import { createRouter, createWebHistory } from 'vue-router'
 const Home  = () => import('../views/Homeview.vue')
 const Login = () => import('../views/Loginview.vue')
 const Users = () => import('../views/Usersview.vue')
-const AccountRequest = () => import('../views/AccountRequestview.vue') // 👈 NEW
+const AccountRequest = () => import('../views/AccountRequestview.vue')
+const Logs = () => import('@/views/Logsview.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'home', component: Home, meta: { requiresAuth: true } },
-    { path: '/login', name: 'login', component: Login },
-    { path: '/utenti', name: 'utenti', component: Users, meta: { requiresAuth: true } }, // 👈
-    // opzionale: compat per vecchi link /users
-    { path: '/users', redirect: '/utenti' },
-    { path: '/logs', name: 'logs', component: () => import('@/views/Logsview.vue') },
 
-    // 👇 NEW: pagina richiesta account (pubblica, senza requiresAuth)
-    { path: '/account-request', name: 'account-request', component: AccountRequest },
+    // PUBBLICHE
+    { path: '/login', name: 'login', component: Login, meta: { public: true } },
+    { path: '/account-request', name: 'account-request', component: AccountRequest, meta: { public: true } },
+
+    // PROTETTE
+    { path: '/utenti', name: 'utenti', component: Users, meta: { requiresAuth: true } },
+    { path: '/users', redirect: '/utenti' },
+    { path: '/logs', name: 'logs', component: Logs, meta: { requiresAuth: true } },
 
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
@@ -30,7 +32,7 @@ function safeSet(k, v) { try { sessionStorage.setItem(k, v) } catch {} }
 export function markLoggedIn ()  { safeSet('flows_logged', '1'); safeSet('flows_logged_ts', String(Date.now())) }
 export function markLoggedOut () { safeSet('flows_logged', '0'); safeSet('flows_logged_ts', String(Date.now())) }
 
-// ping /me con timeout
+// ping /me con timeout (non usato nel guard, ma lo lasciamo pronto)
 async function meWithTimeout(ms = 2500) {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort('timeout'), ms)
@@ -38,13 +40,12 @@ async function meWithTimeout(ms = 2500) {
     const r = await fetch('/me', { credentials: 'include', cache: 'no-store', signal: ctrl.signal })
     if (!r.ok) return false
     const j = await r.json().catch(() => null)
-    return j?.ok === true
+    return j && j.ok === true
   } catch { return false }
   finally { clearTimeout(t) }
 }
 
 // Guardie
-// helper mini-cache
 const AUTH_CACHE_KEY = 'flows_logged'
 function isLogged() {
   try { return sessionStorage.getItem(AUTH_CACHE_KEY) === '1' } catch { return false }
@@ -52,30 +53,33 @@ function isLogged() {
 function getRole() {
   try { return (sessionStorage.getItem('flows_role') || '').toLowerCase() } catch { return '' }
 }
-const ALLOWED = new Set(['admin','user_manager','logs_manager'])
+const ALLOWED = new Set(['admin','user_manager','logs_manager']) // 'user' fuori dalle pagine protette
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
+  // 1) Rotte pubbliche: nessun controllo auth/ruolo
+  if (to.meta && to.meta.public) return next()
+
   const logged = isLogged()
   const role = getRole()
 
-  // Rotte protette
-  if (to.meta?.requiresAuth) {
+  // 2) Rotte protette
+  if (to.meta && to.meta.requiresAuth) {
     if (!logged) {
       const redirect = encodeURIComponent(to.fullPath || '/')
       return next(`/login?redirect=${redirect}`)
     }
     if (!ALLOWED.has(role)) {
-      // ruolo non sufficiente → torna al login con messaggio
+      // Ruolo non sufficiente → torna al login con messaggio
       return next({ path: '/login', query: { denied: 'role' } })
     }
   }
 
-  // Se già loggato e provi ad andare su /login, resta in app
+  // 3) Se già loggato e provi ad andare su /login, resta in app (home)
   if (to.path.startsWith('/login') && logged && ALLOWED.has(role)) {
-    return next('/app')
+    return next('/')
   }
 
   return next()
 })
 
-export default router;
+export default router

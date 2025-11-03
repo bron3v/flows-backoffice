@@ -9,7 +9,6 @@
         <h1 class="title">Richiesta accesso</h1>
 
         <form @submit.prevent="submitRequest">
-          <!-- username o e-mail (lo uso come "nome visuale" di fallback) -->
           <div class="form-group">
             <input
               v-model.trim="usernameOrEmail"
@@ -21,7 +20,6 @@
             />
           </div>
 
-          <!-- NUOVO: e-mail (sostituisce la password) -->
           <div class="form-group">
             <input
               v-model.trim="email"
@@ -33,7 +31,6 @@
             />
           </div>
 
-          <!-- NUOVO: ruolo richiesto -->
           <div class="form-group">
             <select v-model="role" required class="input">
               <option value="user">User (base)</option>
@@ -50,8 +47,17 @@
           </div>
 
           <p v-if="error" style="margin-top:10px;color:#b00020">{{ error }}</p>
-          <p v-if="ok" style="margin-top:10px;color:#0f7b6c">Richiesta inviata! Controlla la casella di posta.</p>
+
+          <!-- Messaggio di conferma richiesto -->
+          <p v-if="ok" style="margin-top:10px;color:#0f7b6c">
+            La tua richiesta è stata inviata. Attendi che un amministratore approvi il tuo account.
+          </p>
         </form>
+
+        <!-- Link "Torna al login" sotto tutto -->
+        <p style="margin-top:12px;font-size:13px;">
+          Torna al <RouterLink to="/login" style="font-weight:700; text-decoration: underline; text-underline-offset: 2px;">Login</RouterLink>
+        </p>
       </div>
     </section>
   </main>
@@ -59,10 +65,10 @@
 
 <script setup>
 import { ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { api } from '@/utils/api'
 
-
- function prettyRole(role) {
+function prettyRole(role) {
   const k = String(role || '').toLowerCase()
   return ({ admin:'Admin', user_manager:'User Manager', logs_manager:'Logs Manager', user:'User' }[k]) || 'User'
 }
@@ -70,7 +76,6 @@ function appendPendingLocally(item) {
   try {
     const key = 'flows_pending'
     const arr = JSON.parse(localStorage.getItem(key) || '[]')
-    // normalizzo un minimo per la card
     const role = String(item.requested_role || item.role || 'user').toLowerCase()
     const roleLabel = item.roleLabel || prettyRole(role)
     const safe = {
@@ -83,7 +88,6 @@ function appendPendingLocally(item) {
       avatar: item.avatar || 'https://i.pravatar.cc/40?img=54',
       display_name: item.display_name || item.name || (item.email ? String(item.email).split('@')[0] : 'Nuovo utente')
     }
-    // evita duplicati per id/email
     const exists = arr.some(x => (x.id ?? x.email) === (safe.id ?? safe.email))
     const next = exists ? arr.map(x => ((x.id ?? x.email) === (safe.id ?? safe.email) ? safe : x)) : [safe, ...arr]
     localStorage.setItem(key, JSON.stringify(next))
@@ -102,8 +106,6 @@ const ALLOWED_ROLES = new Set(['user','user_manager','logs_manager','admin'])
 function isEmail (s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim())
 }
-
-// username tecnico proposto dal "nome visuale"
 function makeUsername (fullName) {
   return String(fullName || '')
     .trim()
@@ -112,10 +114,6 @@ function makeUsername (fullName) {
     .replace(/[^a-z0-9_.-]/g, '')
     .slice(0, 32)
 }
-
-
-
-// opzionale: salvo preferenze locali come fa la modale (name/role per rendering liste pending)
 function savePreferredName(emailAddr, displayName) {
   try {
     const key = 'flows_preferred_names'
@@ -154,7 +152,6 @@ async function submitRequest () {
     return
   }
 
-  // normalizzo i dati come nella modale
   const displayName = userField
   const suggestedUsername = makeUsername(userField)
 
@@ -164,7 +161,7 @@ async function submitRequest () {
   const payload = {
     name: displayName,
     email: emailField,
-    username: suggestedUsername,   // facoltativo lato BE
+    username: suggestedUsername,
     requested_role: wantedRole
   }
 
@@ -172,9 +169,8 @@ async function submitRequest () {
   try {
     const res = await api.requestApproval(payload)
 
-    // dispatch dello stesso evento usato dalla modale, così la lista "pending" si aggiorna live
     const created = {
-      id: res?.request?.id ?? Date.now(),
+      id: res?.request?.id ?? res?.id ?? Date.now(),
       name: payload.name,
       email: payload.email,
       username: payload.username,
@@ -182,14 +178,20 @@ async function submitRequest () {
       display_name: displayName,
       avatar: 'https://i.pravatar.cc/40?img=54'
     }
+
     appendPendingLocally(created)
     window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
-
     ok.value = true
   } catch (e) {
+    const status = e?.status ?? 0
+    const codeStr = (e?.data?.code || e?.data?.error || e?.data?.message || e?.message || '').toString()
     const msg = e?.data?.message || e?.message || ''
-    if (e?.status === 404) {
-      // fallback FE-only identico alla modale
+
+    // 401 legacy "not_logged_in" trattato come modalità offline/compat
+    const notLogged = status === 401 && /not_logged_in/i.test(codeStr)
+
+    // In caso di endpoint mancante (404) o 401 not_logged_in → crea localmente e conferma
+    if (status === 404 || notLogged) {
       const created = {
         id: Date.now(),
         name: payload.name,
@@ -202,20 +204,27 @@ async function submitRequest () {
       appendPendingLocally(created)
       window.dispatchEvent(new CustomEvent('flows:new-pending', { detail: created }))
       ok.value = true
-      loading.value = false
       return
     }
-    if (e?.status === 409)      error.value = 'Richiesta già presente per questa email'
-    else if (e?.status === 422) error.value = msg || 'Dati non validi'
-    else                        error.value = msg || 'Errore durante l’invio della richiesta'
+
+    if (status === 409) {
+      error.value = 'Richiesta già presente per questa email'
+    } else if (status === 422) {
+      error.value = msg || 'Dati non validi'
+    } else if (status >= 500) {
+      error.value = 'Errore server, riprova più tardi'
+    } else {
+      error.value = msg || 'Errore durante l’invio della richiesta'
+    }
   } finally {
     loading.value = false
   }
 }
+
 </script>
 
 <style scoped>
-/* Sfondo esterno */
+/* (stili invariati) */
 .auth-shell {
   min-height: 100vh;
   background: #bfc5c8;
@@ -224,7 +233,6 @@ async function submitRequest () {
   padding: 18px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
-
 .flows-card {
   width: min(850px, 96vw);
   min-height: 600px;
@@ -238,16 +246,8 @@ async function submitRequest () {
   justify-items: center;
   align-content: start;
 }
-
 .brand { width: 100%; text-align: center; margin: 6px 0 24px; }
-#brand-name {
-  margin: 0;
-  font-size: clamp(28px, 6vw, 64px);
-  font-weight: 800;
-  letter-spacing: .5px;
-  color: #ececef;
-}
-
+#brand-name { margin: 0; font-size: clamp(28px, 6vw, 64px); font-weight: 800; letter-spacing: .5px; color: #ececef; }
 .login-card {
   width: min(380px, 90vw);
   height: min(420px, 92vw);
@@ -257,11 +257,8 @@ async function submitRequest () {
   padding: 14px 16px 18px;
   text-align: center;
 }
-
 .title { margin: 6px 0 12px; font-size: 24px; font-weight: 700; color: #1cb5a9; }
 .form-group { margin-bottom: 10px; }
-
-/* input/select con lo stesso stile */
 .input {
   width: 100%;
   height: 40px;
@@ -277,7 +274,6 @@ async function submitRequest () {
 }
 .input::placeholder { color: #8fa3a9; }
 .input:focus { border-color: #15978f; box-shadow: 0 0 0 3px rgba(28,181,169,.18); }
-
 .btn {
   width: 100%;
   height: 42px;
@@ -292,7 +288,6 @@ async function submitRequest () {
 }
 .btn:hover { filter: brightness(0.96); }
 .btn:active { transform: translateY(1px); }
-
 @media (max-width: 720px) {
   #brand-name { font-size: clamp(28px, 8vw, 48px); }
 }

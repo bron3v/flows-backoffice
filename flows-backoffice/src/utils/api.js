@@ -1,52 +1,60 @@
 // src/utils/api.js
-import router from '@/router'
-import { markLoggedOut } from '@/router'   // ⬅️ helper del router
+import router, { markLoggedOut } from '@/router'   // importa anche markLoggedOut dallo stesso modulo
 
-export async function request(path, { method = 'GET', body, headers } = {}) {
+export async function request(path, { method = 'GET', body, headers, skipAuthRedirect = false } = {}) {
   const opts = {
     method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
-  };
+  }
   if (body !== undefined) {
-    opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+    opts.body = typeof body === 'string' ? body : JSON.stringify(body)
   }
 
-  const res = await fetch(path, opts);
-  const ct = res.headers.get('content-type') || '';
+  const res = await fetch(path, opts)
+  const ct = res.headers.get('content-type') || ''
   const payload = ct.includes('application/json')
     ? await res.json().catch(() => ({}))
-    : await res.text().catch(() => '');
+    : await res.text().catch(() => '')
 
-  // --- Guardia universale 401 per /admin/api/* e co. ---
+  // Determina se evitare il redirect (pagina pubblica o chiamata marcata come "skip")
+  const current = router.currentRoute?.value
+  const onPublicRoute = Boolean(current && current.meta && current.meta.public)
+  const shouldSkip = Boolean(skipAuthRedirect || onPublicRoute)
+
+  // --- Guardia universale 401 ---
   if (res.status === 401) {
-    // invalida lo stato locale
-    markLoggedOut?.();
+    // Uniforma l'errore per i caller
+    const err = new Error(payload?.message || 'Unauthorized')
+    err.status = 401
+    err.data = payload
 
-    // evita redirect mentre stai già facendo login
-    const isLoginRoute = router.currentRoute?.value?.path?.startsWith('/login');
-
-    // costruisci "redirect" verso la pagina in cui eri
-    const where = location.pathname + location.search + location.hash;
-
-    if (!isLoginRoute) {
-      router.replace(`/login?redirect=${encodeURIComponent(where)}`);
+    if (shouldSkip) {
+      // Niente logout e NIENTE redirect: lascia gestire al chiamante
+      throw err
     }
 
-    // uniforma l'errore per i caller
-    const err = new Error(payload?.message || 'Unauthorized');
-    err.status = 401;
-    err.data = payload;
-    throw err;
+    // Caso normale: invalida stato locale e vai al login
+    markLoggedOut?.()
+
+    const isLoginRoute = current?.path?.startsWith('/login')
+    const where = location.pathname + location.search + location.hash
+
+    if (!isLoginRoute) {
+      router.replace(`/login?redirect=${encodeURIComponent(where)}`)
+    }
+
+    throw err
   }
 
   if (!res.ok) {
-    const err = new Error(payload?.message || `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = payload;
-    throw err;
+    const err = new Error(payload?.message || `HTTP ${res.status}`)
+    err.status = res.status
+    err.data = payload
+    throw err
   }
-  return payload;
+
+  return payload
 }
 
 // --- API convenience ---
@@ -57,43 +65,60 @@ export const api = {
       return await request('/auth/login', {
         method: 'POST',
         body: { username, password },
-      });
+        // siamo su pagina pubblica (login), lo skip avverrà già automaticamente dal guard,
+        // ma lasciamo che questo resti false per coerenza
+      })
     } catch (err) {
       if (err.status === 401) {
-        return { ok: false, message: 'invalid_credentials' };
+        return { ok: false, message: 'invalid_credentials' }
       }
-      throw err;
+      throw err
     }
   },
-  logout() { return request('/auth/logout', { method: 'POST' }); },
-  me() { return request('/me'); },
+  logout() { return request('/auth/logout', { method: 'POST' }) },
+  me() { return request('/me') },
 
   // KPI / Utenti
-  stats() { return request('/admin/api/stats'); },
-  usersList() { return request('/admin/api/users'); },
+  stats() { return request('/admin/api/stats') },
+  usersList() { return request('/admin/api/users') },
   deleteUser(id) {
-    return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 
-  // 🔹 Flusso approvazioni (nuovo)
-requestApproval({ name, email, username, role, requested_role }) {
-  const r = role ?? requested_role;
-  return request('/admin/api/approvals/request', {
-    method: 'POST',
-    body: { name, email, username, role: r, requested_role: r }, // <-- invia entrambi per compatibilità
-  });
-},
+  // 🔹 Richiesta approvazione (NO redirect al login sui 401)
+  // 🔹 Richiesta approvazione (NO redirect al login sui 401)
+  requestApproval({ name, email, username, role, requested_role }) {
+    const r = role ?? requested_role
+    // tenta l'endpoint pubblico moderno
+    return request('/auth/request-approval', {
+      method: 'POST',
+      body: { name, email, username, role: r, requested_role: r },
+      skipAuthRedirect: true,
+    }).catch(err => {
+      // fallback legacy se l'endpoint pubblico non esiste
+      if (err && err.status === 404) {
+        return request('/admin/api/approvals/request', {
+          method: 'POST',
+          body: { name, email, username, role: r, requested_role: r },
+          skipAuthRedirect: true,
+        })
+      }
+      throw err
+    })
+  },
 
-  // 2) La Home carica la lista delle richieste pendenti
+
+  // Lista richieste pendenti (protetta)
   approvalsList() {
-    return request('/admin/api/approvals');
+    return request('/admin/api/approvals')
   },
 
-  // 3) La Home approva (crea l’utente e rimuove la richiesta)
-approvalsApprove({ id, name, email, username, role, requested_role }) {
-  const r = role ?? requested_role;
-  return request('/admin/api/approvals/approve', {
-    method: 'POST',
-    body: { id, name, email, username, role: r, requested_role: r }, // <-- passa anche qui
-  });
-}};
+  // Approva richiesta (protetta)
+  approvalsApprove({ id, name, email, username, role, requested_role }) {
+    const r = role ?? requested_role
+    return request('/admin/api/approvals/approve', {
+      method: 'POST',
+      body: { id, name, email, username, role: r, requested_role: r },
+    })
+  },
+}
