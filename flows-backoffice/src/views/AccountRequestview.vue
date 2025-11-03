@@ -291,4 +291,9 @@ async function submitRequest () {
 @media (max-width: 720px) {
   #brand-name { font-size: clamp(28px, 8vw, 48px); }
 }
+
+.login-card a { color: #1cb5a9 !important; }
+.login-card a:visited { color: #1cb5a9 !important; }
+.login-card a:hover { color: #15978f !important; }
+
 </style>
