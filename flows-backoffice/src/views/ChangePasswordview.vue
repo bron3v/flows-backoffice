@@ -157,10 +157,24 @@ async function submitChange () {
   }
 }
 
-function goBack () {
-  const redirect = route.query.redirect || '/'
-  router.push(String(redirect))
+async function goBack () {
+  // Chiudi la sessione server-side (best effort)
+  try { await api.logout() } catch {}
+
+  // Pulisci lo stato locale usato dal guard
+  try {
+    sessionStorage.setItem('flows_logged', '0')
+    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
+    sessionStorage.removeItem('flows_role')
+  } catch {}
+
+  // Vai esplicitamente alla pagina di login
+  router.replace({
+    path: '/login',
+    query: { redirect: String(route.query.redirect || '/') }
+  })
 }
+
 </script>
 
 <style scoped>
