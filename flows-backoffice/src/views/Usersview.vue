@@ -173,7 +173,7 @@
           <div class="btns">
             <button type="button" class="btn secondary" @click="closeModal" :disabled="loading">Annulla</button>
             <button class="btn primary" :disabled="loading || ok">
-              {{ loading ? 'Invio…' : 'Invia richiesta' }}
+              {{ loading ? 'Creazione…' : 'Crea Utente' }}
             </button>
           </div>
         </form>

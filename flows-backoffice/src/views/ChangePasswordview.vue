@@ -9,9 +9,7 @@
       <!-- Banner/Notifica -->
       <div class="notice warn">
         <strong>Password richiesta:</strong>
-        <span>
-          Per proteggere il tuo account, imposta una nuova password adesso.
-        </span>
+        <span>Per proteggere il tuo account, imposta una nuova password.</span>
       </div>
 
       <!-- Card cambio password -->
@@ -19,7 +17,7 @@
         <h1 class="title">Cambia password</h1>
 
         <p class="muted" style="margin-top:-4px">
-          La nuova password deve rispettare i requisiti minimi indicati sotto.
+          La nuova password deve rispettare i requisiti minimi indicati.
         </p>
 
         <form @submit.prevent="submitChange">
@@ -29,9 +27,9 @@
               <input
                 v-model.trim="password"
                 :type="showPass ? 'text' : 'password'"
+                :class="['input', { invalid: password && !(passLenOk && passHasLetter && passHasDigit) }]"
                 placeholder="Nuova password"
                 required
-                class="input"
                 autocomplete="new-password"
                 inputmode="text"
               />
@@ -44,6 +42,7 @@
                 {{ showPass ? '🙈' : '👁️' }}
               </button>
             </div>
+
             <ul class="rules">
               <li :class="{ ok: passLenOk }">Minimo {{ MIN_LEN }} caratteri</li>
               <li :class="{ ok: passHasLetter }">Almeno una lettera</li>
@@ -53,33 +52,42 @@
 
           <!-- Conferma -->
           <div class="form-group">
-            <input
-              v-model.trim="confirm"
-              :type="showConfirm ? 'text' : 'password'"
-              placeholder="Conferma password"
-              required
-              class="input"
-              autocomplete="new-password"
-              inputmode="text"
-            />
-            <div class="inline">
-              <label class="switch">
-                <input type="checkbox" v-model="showConfirm" />
-                <span>Mostra conferma</span>
-              </label>
+            <div class="field-with-action">
+              <input
+                v-model.trim="confirm"
+                :type="showConfirm ? 'text' : 'password'"
+                :class="['input', { invalid: confirm && !match }]"
+                placeholder="Conferma password"
+                required
+                autocomplete="new-password"
+                inputmode="text"
+              />
+              <button
+                class="eye-btn"
+                type="button"
+                aria-label="Mostra/Nascondi conferma password"
+                @click="showConfirm = !showConfirm"
+              >
+                {{ showConfirm ? '🙈' : '👁️' }}
+              </button>
             </div>
+
             <p v-if="confirm && !match" class="help error">Le password non coincidono.</p>
           </div>
 
+          <!-- Azioni -->
           <!-- Azioni -->
           <div class="actions">
             <button class="btn primary" :disabled="!canSubmit || loading">
               {{ loading ? 'Salvataggio…' : 'Aggiorna password' }}
             </button>
-            <button class="btn ghost" type="button" @click="goBack" :disabled="loading">
-              Annulla
-            </button>
           </div>
+
+          <!-- Link login -->
+          <p class="back-to-login">
+            Torna al <RouterLink to="/login">login</RouterLink>
+          </p>
+
 
           <!-- Esiti -->
           <p v-if="err" class="feedback error">{{ err }}</p>
@@ -89,6 +97,7 @@
     </section>
   </main>
 </template>
+
 
 <script setup>
 import { ref, computed } from 'vue'
@@ -178,7 +187,7 @@ async function goBack () {
 </script>
 
 <style scoped>
-/* Struttura coerente con la pagina di login */
+/* ---------- Layout ---------- */
 .auth-shell{
   min-height: 100vh;
   display: grid;
@@ -217,75 +226,78 @@ async function goBack () {
   gap: 4px;
   border-bottom: 1px solid #e5e7eb;
 }
-.notice.warn{
-  background: #fffbeb;
-  color: #7c2d12;
+.notice.warn{ background:#fffbeb; color:#7c2d12; }
+
+/* ---------- Card contenuto ---------- */
+.login-card{
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  overflow: hidden;                /* evita focus ring e sbordi */
 }
+.login-card *{ box-sizing: border-box; }  /* 👉 impedisce lo “sbordo” */
 
-/* Card contenuto */
-.login-card{ padding: 18px; display: grid; gap: 14px; }
-.title{ font-size: 22px; font-weight: 800; margin: 0; color: #0f172a; }
-.muted{ color: #6b7280; }
+.title{ font-size: 22px; font-weight: 800; margin: 0; color:#0f172a; }
+.muted{ color:#6b7280; }
+.form-group{ display:grid; gap:8px; }
 
-.form-group{ display: grid; gap: 8px; }
-/* —— Input “rossi” ——————————————————— */
+/* ---------- Campi ---------- */
+.input, button.btn{ width:100%; display:block; }
 .input{
-  width: 100%;
-  border: 1px solid #ef4444;       /* rosso */
+  border: 1px solid #cbd5e1;       /* neutro */
   border-radius: 10px;
   padding: 10px 12px;
-  background: #fff5f5;             /* rosso molto chiaro */
+  background: #ffffff;
   outline: none;
   font-size: 14px;
-  color: #991b1b;                  /* testo rosso scuro */
+  color: #0f172a;
+  transition: border-color .15s, box-shadow .15s, background .15s;
 }
-
-.input::placeholder{
-  color: #fca5a5;                  /* placeholder rosato */
-}
-
+.input::placeholder{ color:#94a3b8; }
 .input:focus{
-  border-color:#dc2626;            /* rosso più saturo in focus */
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, .15);
+  border-color:#1cb5a9;            /* teal brand */
+  box-shadow: 0 0 0 3px rgba(28,181,169,.18);
 }
 
-
-.field-with-action{
-  position: relative;
-  display: grid;
+/* Stato di errore (solo quando .invalid) */
+.input.invalid{
+  border-color:#ef4444;
+  background:#fff5f5;
+  color:#991b1b;
 }
+.input.invalid::placeholder{ color:#fca5a5; }
+.input.invalid:focus{
+  border-color:#dc2626;
+  box-shadow: 0 0 0 3px rgba(220,38,38,.15);
+}
+
+/* Campo con azione (eye button) */
+.field-with-action{ position:relative; display:grid; }
 .eye-btn{
-  position: absolute;
-  right: 8px;
-  top: 50%;
+  position: absolute; right:8px; top:50%;
   transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 16px;
+  border:none; background:transparent;
+  cursor:pointer; font-size:16px;
 }
 
 /* Requisiti */
 .rules{
-  list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 12px; color: #6b7280;
+  list-style:none; padding:0;
+  display:grid; gap:4px;
+  font-size:12px; color:#6b7280;
+  margin: 0 0 12px 0;              /* 🔧 stacco in basso dalla conferma */
 }
-.rules li{ display: flex; align-items: center; gap: 6px; }
-.rules li::before{
-  content: '•'; display: inline-block;
-  transform: translateY(-1px);
-  opacity: .6;
-  margin-right: 2px;
-}
-.rules li.ok{ color: #166534; }
-.rules li.ok::before{ content: '✓'; opacity: 1; }
-
-/* Switch inline */
-.inline{ display: flex; justify-content: space-between; align-items: center; }
-.switch{ display: inline-flex; align-items: center; gap: 6px; color: #374151; font-size: 13px; }
-.switch input{ transform: translateY(1px); }
+.rules li{ display:flex; align-items:center; gap:6px; }
+.rules li::before{ content:'•'; transform:translateY(-1px); opacity:.6; margin-right:2px; }
+.rules li.ok{ color:#166534; }
+.rules li.ok::before{ content:'✓'; opacity:1; }
 
 /* Azioni */
-.actions{ display:flex; gap:10px; margin-top: 6px; }
+.actions{
+  display:flex;
+  justify-content:center;          /* 🔧 centra il pulsante */
+  margin-top:8px;
+}
 .btn{
   border: 1px solid #e5e7eb;
   background: #f8fafc;
@@ -295,14 +307,33 @@ async function goBack () {
   font-weight: 700;
 }
 .btn.primary{
-  background:#111827; color:#fff; border-color:#111827;
+  background:#1cb5a9; color:#fff; border-color:#1cb5a9;
+  width:100%; max-width:280px;     /* 🔧 larghezza contenuta e centrata */
 }
-.btn:disabled{ opacity:.6; cursor:not-allowed; }
-.btn.ghost{ background:#fff; }
+.btn.primary:hover{ filter:brightness(.98); }
+.btn:disabled{
+  opacity: .6;
+  cursor: default;   /* freccia, non mano */
+}
 
-/* Feedback */
-.feedback{ margin: 6px 2px 0; font-size: 14px; }
-.feedback.success{ color: #166534; }
-.feedback.error{ color: #b91c1c; }
-.help.error{ color: #b91c1c; font-size: 12px; margin-top: 4px; }
+
+/* Feedback / link di ritorno */
+.feedback{ margin:6px 2px 0; font-size:14px; }
+.feedback.success{ color:#166534; }
+.feedback.error{ color:#b91c1c; }
+.help.error{ color:#b91c1c; font-size:12px; margin-top:4px; }
+
+.back-to-login{
+  margin: 10px 0 0;
+  text-align:center;
+  font-size:13px;
+  color:#374151;
+}
+.back-to-login a{
+  color:#1cb5a9; font-weight:700;
+  text-decoration:underline; text-underline-offset:2px;
+}
+.back-to-login a:hover{ color:#15978f; }
 </style>
+
+

@@ -55,7 +55,7 @@
         </form>
 
         <!-- Link "Torna al login" sotto tutto -->
-        <p style="margin-top:12px;font-size:13px;">
+        <p style="margin-top:12px;font-size:13px; color:black;">
           Torna al <RouterLink to="/login" style="font-weight:700; text-decoration: underline; text-underline-offset: 2px;">Login</RouterLink>
         </p>
       </div>
@@ -224,7 +224,7 @@ async function submitRequest () {
 </script>
 
 <style scoped>
-/* (stili invariati) */
+/* ---------- Shell ---------- */
 .auth-shell {
   min-height: 100vh;
   background: #bfc5c8;
@@ -233,6 +233,8 @@ async function submitRequest () {
   padding: 18px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
+
+/* ---------- Card esterna ---------- */
 .flows-card {
   width: min(850px, 96vw);
   min-height: 600px;
@@ -246,8 +248,17 @@ async function submitRequest () {
   justify-items: center;
   align-content: start;
 }
+
 .brand { width: 100%; text-align: center; margin: 6px 0 24px; }
-#brand-name { margin: 0; font-size: clamp(28px, 6vw, 64px); font-weight: 800; letter-spacing: .5px; color: #ececef; }
+#brand-name {
+  margin: 0;
+  font-size: clamp(28px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: #ececef;
+}
+
+/* ---------- Card login ---------- */
 .login-card {
   width: min(380px, 90vw);
   height: min(420px, 92vw);
@@ -256,11 +267,31 @@ async function submitRequest () {
   box-shadow: 0 10px 24px rgba(0,0,0,.16);
   padding: 14px 16px 18px;
   text-align: center;
+  overflow: hidden;                /* evita che il focus ring “sbordi” */
 }
-.title { margin: 6px 0 12px; font-size: 24px; font-weight: 700; color: #1cb5a9; }
+
+/* impedisce lo sbordo degli elementi interni */
+.login-card * { box-sizing: border-box; }
+
+.title {
+  margin: 6px 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1cb5a9;
+}
+
 .form-group { margin-bottom: 10px; }
-.input {
+
+/* ---------- Campi input/select/button ---------- */
+.input,
+select.input,
+button.btn {
   width: 100%;
+  display: block;
+  box-sizing: border-box;          /* fondamentale per non far “uscire” i bordi */
+}
+
+.input {
   height: 40px;
   padding: 0 10px;
   font-size: 14px;
@@ -272,10 +303,13 @@ async function submitRequest () {
   transition: border-color .15s, box-shadow .15s;
   appearance: none;
 }
+
+select.input { padding-right: 34px; }  /* spazio per la freccia del select */
+
 .input::placeholder { color: #8fa3a9; }
 .input:focus { border-color: #15978f; box-shadow: 0 0 0 3px rgba(28,181,169,.18); }
+
 .btn {
-  width: 100%;
   height: 42px;
   border: none;
   background: #1cb5a9;
@@ -288,12 +322,15 @@ async function submitRequest () {
 }
 .btn:hover { filter: brightness(0.96); }
 .btn:active { transform: translateY(1px); }
+
+/* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   #brand-name { font-size: clamp(28px, 8vw, 48px); }
 }
 
+/* ---------- Link ---------- */
 .login-card a { color: #1cb5a9 !important; }
 .login-card a:visited { color: #1cb5a9 !important; }
 .login-card a:hover { color: #15978f !important; }
-
 </style>
+
