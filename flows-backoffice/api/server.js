@@ -54,7 +54,7 @@ module.exports = { pool }
 // ---------- Helper DB ----------
 async function findUserByUsername (username) {
   const sql = `
-    SELECT id, username, password_hash, role
+    SELECT id, username, password_hash, role, first_login
     FROM public.users
     WHERE lower(username) = lower($1)
     LIMIT 1
@@ -66,8 +66,8 @@ async function findUserByUsername (username) {
 async function createUser (username, plainPassword) {
   const hash = await bcrypt.hash(plainPassword, 10)
   const sql = `
-    INSERT INTO public.users (username, password_hash)
-    VALUES ($1, $2)
+    INSERT INTO public.users (username, password_hash, first_login)
+    VALUES ($1, $2, false)
     ON CONFLICT (username) DO NOTHING
     RETURNING id, username
   `
@@ -143,6 +143,34 @@ app.post('/me/ping', requireLogin, (req, res) => {
   res.json({ ok: true, at: Date.now() })
 })
 
+app.post('/auth/change-password', requireLogin, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body || {}
+    if (!current_password || !new_password) {
+      return res.status(400).json({ ok: false, message: 'missing_fields' })
+    }
+    const { rows } = await pool.query(
+      'SELECT id, password_hash FROM public.users WHERE id = $1',
+      [req.session.userId]
+    )
+    const u = rows[0]
+    if (!u) return res.status(401).json({ ok: false })
+    const ok = await bcrypt.compare(current_password, u.password_hash)
+    if (!ok) return res.status(200).json({ ok: false, message: 'invalid_current_password' })
+
+    const hash = await bcrypt.hash(new_password, 10)
+    await pool.query(
+      'UPDATE public.users SET password_hash=$1, first_login=true WHERE id=$2',
+      [hash, req.session.userId]
+    )
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('[/auth/change-password]', e)
+    return res.status(500).json({ ok: false, message: 'server_error' })
+  }
+})
+
+
 // ---------- Log richieste (dev) ----------
 app.use((req, _res, next) => {
   console.log(`[req] ${req.method} ${req.url}`)
@@ -197,9 +225,13 @@ app.post('/auth/login', async (req, res) => {
     // risposta (mantieni shape attuale)
     return res.json({
       ok: true,
-      user: { id: user.id, username: user.username, role: user.role }
-      // volendo puoi aggiungere: last_seen_ts: now
-    });
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        first_login: user.first_login === true   
+      }
+    })
 
   } catch (err) {
     console.error('[/auth/login] error:', err);
@@ -256,14 +288,22 @@ app.get('/me', async (req, res) => {
     return res.status(401).json({ ok: false })
   }
   const { rows } = await pool.query(
-    'SELECT id, username, role FROM public.users WHERE id = $1',
+    'SELECT id, username, role, first_login FROM public.users WHERE id = $1',
     [req.session.userId]
   )
   const u = rows[0]
   if (!u) return res.status(401).json({ ok: false })
   // sincronizza anche la sessione se mancava il role
   req.session.user = { id: u.id, username: u.username, role: u.role }
-  return res.json({ ok: true, user: u })
+  return res.json({
+    ok: true,
+    user: {
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      first_login: u.first_login === true
+    }
+  })
 })
 
 

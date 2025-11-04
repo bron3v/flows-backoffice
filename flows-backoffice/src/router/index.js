@@ -5,7 +5,8 @@ const Home  = () => import('../views/Homeview.vue')
 const Login = () => import('../views/Loginview.vue')
 const Users = () => import('../views/Usersview.vue')
 const AccountRequest = () => import('../views/AccountRequestview.vue')
-const Logs = () => import('@/views/Logsview.vue')
+const Logs = () => import('../views/Logsview.vue')
+const ChangePassword = () => import("../views/ChangePasswordview.vue")
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,6 +21,7 @@ const router = createRouter({
     { path: '/utenti', name: 'utenti', component: Users, meta: { requiresAuth: true } },
     { path: '/users', redirect: '/utenti' },
     { path: '/logs', name: 'logs', component: Logs, meta: { requiresAuth: true } },
+    { path: '/change-password', name: 'change-password', component: ChangePassword, meta: {requiresAuth: true} },
 
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
@@ -56,30 +58,28 @@ function getRole() {
 const ALLOWED = new Set(['admin','user_manager','logs_manager']) // 'user' fuori dalle pagine protette
 
 router.beforeEach(async (to, _from, next) => {
-  // 1) Rotte pubbliche: nessun controllo auth/ruolo
   if (to.meta && to.meta.public) return next()
 
   const logged = isLogged()
   const role = getRole()
 
-  // 2) Rotte protette
   if (to.meta && to.meta.requiresAuth) {
     if (!logged) {
       const redirect = encodeURIComponent(to.fullPath || '/')
       return next(`/login?redirect=${redirect}`)
     }
-    if (!ALLOWED.has(role)) {
-      // Ruolo non sufficiente → torna al login con messaggio
+    // ⬇️ SKIP controllo ruolo solo per change-password
+    if (to.name !== 'change-password' && !ALLOWED.has(role)) {
       return next({ path: '/login', query: { denied: 'role' } })
     }
   }
 
-  // 3) Se già loggato e provi ad andare su /login, resta in app (home)
   if (to.path.startsWith('/login') && logged && ALLOWED.has(role)) {
     return next('/')
   }
 
   return next()
 })
+
 
 export default router

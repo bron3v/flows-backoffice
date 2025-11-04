@@ -68,10 +68,12 @@ const router = useRouter()
 const route = useRoute()
 
 function sanitizeRedirect(q) {
-  if (typeof q !== 'string' || !q) return '/app'
-  if (q.startsWith('http://') || q.startsWith('https://')) return '/app'
+  // Permetti solo redirect interni all’app
+  if (typeof q !== 'string' || !q) return '/'
+  if (q.startsWith('http://') || q.startsWith('https://')) return '/'
   return q
 }
+
 
 async function doLogin() {
   error.value = ''
@@ -87,31 +89,42 @@ async function doLogin() {
 
   loading.value = true
   try {
+    // Chiamata login: il backend ora restituisce user.first_login
     const res = await api.login(user, pass) // POST /auth/login
-    if (!(res?.ok)) {
+    if (!(res?.ok) || !res?.user) {
       error.value = 'Credenziali errate'
       return
     }
 
-    let me
-    try { me = await api.me() } catch {}
-    const role = String(me?.role ?? me?.user?.role ?? res?.user?.role ?? '').toLowerCase()
+    const role = String(res.user.role || '').toLowerCase()
 
-    if (!role || role === 'user') {
-      error.value = 'Accesso negato: il tuo ruolo non consente l’accesso al backoffice. Contatta un amministratore.'
-      try { await api.logout?.() } catch {}
+    // Semantica: account appena creato -> first_login === false -> obbligo cambio password
+    const firstLogin =
+      res.user.first_login === true ? true :
+      res.user.first_login === false ? false :
+      false // fallback sicuro: se assente, forza cambio password
+
+    if (firstLogin === false) {
+      markLoggedIn()
+      try { sessionStorage.setItem('flows_role', role || '') } catch {}
+      const after = sanitizeRedirect(route.query.redirect)
+      router.replace({ path: '/change-password', query: { redirect: after } })
       return
     }
 
+    // Flusso normale
     markLoggedIn()
     try { sessionStorage.setItem('flows_role', role) } catch {}
     router.replace(sanitizeRedirect(route.query.redirect))
+
   } catch {
     error.value = 'Errore di connessione'
   } finally {
     loading.value = false
   }
 }
+
+
 </script>
 
 <style scoped>
