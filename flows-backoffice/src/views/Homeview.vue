@@ -26,14 +26,15 @@
           <!-- KPI -->
           <div class="kpi-row">
             <div class="kpi">
-              <div class="kpi-icon users"></div>
+              <div class="kpi-icon users" :style="iconStyle(usersIcon)"></div>
               <div>
                 <div class="kpi-val">{{ kpi.usersTotal }}</div>
                 <div class="kpi-label">Utenti totali</div>
               </div>
             </div>
+
             <div class="kpi">
-              <div class="kpi-icon orders"></div>
+              <div class="kpi-icon orders" :style="iconStyle(onlineUsersIcon)"></div>
               <div>
                 <div class="kpi-val">{{ kpi.usersOnline }}</div>
                 <div class="kpi-label">Utenti online</div>
@@ -141,7 +142,9 @@ import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import { api } from '@/utils/api'
 import AvatarCard from '@/components/AvatarCard.vue'
-import AppTopbar from '@/components/AppTopBar.vue'   // ⬅️ aggiungi
+import AppTopbar from '@/components/AppTopBar.vue'   
+import usersIcon from '@/assets/users.png'
+import onlineUsersIcon from '@/assets/onlineUsers.png'
 
 // stato base
 const router = useRouter()
@@ -158,6 +161,10 @@ const pending = ref([])
 const team    = ref([])
 
 const q = ref('') // filtro ricerca
+
+const iconStyle = (src) => ({
+  backgroundImage: `url(${src})`
+})
 
 function isSelf(u) {
   const me = sessionUser.value
@@ -848,16 +855,23 @@ window.addEventListener('flows:new-pending', (e) => {
   gap: 12px;
 }
 
-.kpi-icon {
+.kpi-icon{
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: #eef2ff;
   position: relative;
+  background-color: #f1f5f9;      /* base neutra */
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 70% 70%;       /* scala l’icona dentro il quadrato */
 }
 
-.kpi-icon.users { background: #eef2ff; }
-.kpi-icon.orders { background: #ecfeff; }
+/* opzionale: tinte di sfondo coerenti come prima */
+.kpi-icon.users  { background-color: #eef2ff; }
+.kpi-icon.orders { background-color: #ecfeff; }
+
+/* lasciamo invariato il products con il ✓ */
+
 
 .kpi-val {
   font-weight: 800;
