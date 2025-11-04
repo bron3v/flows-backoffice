@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #15eda5 ; /* verde/teal come in figura */
+  background: #15e6a1 ; /* verde/teal come in figura */
   color: #082f1f;
   display: grid;
   place-items: center;
@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
 
 /* Logout verde/teal come "Invia richiesta" */
 .btn-primary{
-  background:#15eda5;
+  background:#15e6a1;
   color:#052e22;
   box-shadow: 0 6px 18px rgba(16,185,129,.35);
 }
