@@ -1,47 +1,52 @@
 // src/utils/api.js
-import router, { markLoggedOut } from '@/router'   // importa anche markLoggedOut dallo stesso modulo
+import router, { markLoggedOut } from '@/router'
 
-export async function request(path, { method = 'GET', body, headers, skipAuthRedirect = false } = {}) {
+/**
+ * Richiesta HTTP con:
+ * - credenziali incluse
+ * - parsing JSON/text sicuro
+ * - gestione 401 centralizzata (con possibilità di skipare il redirect)
+ */
+export async function request(
+  path,
+  { method = 'GET', body, headers, skipAuthRedirect = false } = {}
+) {
   const opts = {
     method,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...(headers || {}) }
   }
+
   if (body !== undefined) {
     opts.body = typeof body === 'string' ? body : JSON.stringify(body)
   }
 
   const res = await fetch(path, opts)
+
   const ct = res.headers.get('content-type') || ''
   const payload = ct.includes('application/json')
     ? await res.json().catch(() => ({}))
     : await res.text().catch(() => '')
 
-  // Determina se evitare il redirect (pagina pubblica o chiamata marcata come "skip")
+  // Route corrente (per capire se è pubblica)
   const current = router.currentRoute?.value
   const onPublicRoute = Boolean(current && current.meta && current.meta.public)
   const shouldSkip = Boolean(skipAuthRedirect || onPublicRoute)
 
-  // --- Guardia universale 401 ---
+  // Guardia universale 401 (sessione scaduta / non loggato)
   if (res.status === 401) {
-    // Uniforma l'errore per i caller
     const err = new Error(payload?.message || 'Unauthorized')
     err.status = 401
     err.data = payload
 
-    if (shouldSkip) {
-      // Niente logout e NIENTE redirect: lascia gestire al chiamante
-      throw err
-    }
-
-    // Caso normale: invalida stato locale e vai al login
-    markLoggedOut?.()
-
-    const isLoginRoute = current?.path?.startsWith('/login')
-    const where = location.pathname + location.search + location.hash
-
-    if (!isLoginRoute) {
-      router.replace(`/login?redirect=${encodeURIComponent(where)}`)
+    if (!shouldSkip) {
+      // invalidiamo stato locale e portiamo al login con redirect di ritorno
+      markLoggedOut?.()
+      const isLoginRoute = current?.path?.startsWith('/login')
+      const where = location.pathname + location.search + location.hash
+      if (!isLoginRoute) {
+        router.replace(`/login?redirect=${encodeURIComponent(where)}`)
+      }
     }
 
     throw err
@@ -57,68 +62,94 @@ export async function request(path, { method = 'GET', body, headers, skipAuthRed
   return payload
 }
 
-// --- API convenience ---
+/**
+ * Wrapper di comodo per le API dell’app.
+ * Restituisce sempre l’oggetto payload del backend (di solito { ok: boolean, ... }).
+ */
 export const api = {
-  // Auth
+  // --- Auth ---
   async login(username, password) {
-    try {
-      return await request('/auth/login', {
-        method: 'POST',
-        body: { username, password },
-        // siamo su pagina pubblica (login), lo skip avverrà già automaticamente dal guard,
-        // ma lasciamo che questo resti false per coerenza
-      })
-    } catch (err) {
-      if (err.status === 401) {
-        return { ok: false, message: 'invalid_credentials' }
-      }
-      throw err
-    }
+    // /auth/login torna 200 anche per credenziali errate con { ok:false, message:'invalid_credentials' }
+    return request('/auth/login', {
+      method: 'POST',
+      body: { username, password }
+    })
   },
-  logout() { return request('/auth/logout', { method: 'POST' }) },
-  me() { return request('/me') },
 
-  // KPI / Utenti
-  stats() { return request('/admin/api/stats') },
-  usersList() { return request('/admin/api/users') },
+  logout() {
+    return request('/auth/logout', { method: 'POST' })
+  },
+
+  me() {
+    return request('/me')
+  },
+
+  /**
+   * Cambia password.
+   * Supporta:
+   *  - { password }                          -> solo nuova password
+   *  - { current_password, new_password }    -> verifica quella attuale, poi aggiorna
+   * Il backend imposta first_login=true al successo.
+   */
+  async changePassword({ password, current_password, new_password } = {}) {
+    const body =
+      typeof current_password === 'string' && typeof new_password === 'string'
+        ? { current_password, new_password }
+        : { password }
+
+    return request('/auth/change-password', {
+      method: 'POST',
+      body
+    })
+  },
+
+  // --- KPI / Utenti protetti ---
+  stats() {
+    return request('/admin/api/stats')
+  },
+
+  usersList() {
+    return request('/admin/api/users')
+  },
+
   deleteUser(id) {
-    return request(`/admin/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    return request(`/admin/api/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    })
   },
 
-  // 🔹 Richiesta approvazione (NO redirect al login sui 401)
-  // 🔹 Richiesta approvazione (NO redirect al login sui 401)
+  // --- Approval flow ---
+  /**
+   * Endpoint pubblico: non fare redirect automatico al login su eventuali 401.
+   * Se /auth/request-approval non esiste, fallback su /admin/api/approvals/request.
+   */
   requestApproval({ name, email, username, role, requested_role }) {
     const r = role ?? requested_role
-    // tenta l'endpoint pubblico moderno
     return request('/auth/request-approval', {
       method: 'POST',
       body: { name, email, username, role: r, requested_role: r },
-      skipAuthRedirect: true,
+      skipAuthRedirect: true
     }).catch(err => {
-      // fallback legacy se l'endpoint pubblico non esiste
       if (err && err.status === 404) {
         return request('/admin/api/approvals/request', {
           method: 'POST',
           body: { name, email, username, role: r, requested_role: r },
-          skipAuthRedirect: true,
+          skipAuthRedirect: true
         })
       }
       throw err
     })
   },
 
-
-  // Lista richieste pendenti (protetta)
   approvalsList() {
     return request('/admin/api/approvals')
   },
 
-  // Approva richiesta (protetta)
   approvalsApprove({ id, name, email, username, role, requested_role }) {
     const r = role ?? requested_role
     return request('/admin/api/approvals/approve', {
       method: 'POST',
-      body: { id, name, email, username, role: r, requested_role: r },
+      body: { id, name, email, username, role: r, requested_role: r }
     })
-  },
+  }
 }

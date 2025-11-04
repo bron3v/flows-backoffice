@@ -69,7 +69,7 @@ async function createUser (username, plainPassword) {
     INSERT INTO public.users (username, password_hash, first_login)
     VALUES ($1, $2, false)
     ON CONFLICT (username) DO NOTHING
-    RETURNING id, username
+    RETURNING id, username, role, first_login
   `
   const { rows } = await pool.query(sql, [username, hash])
   return rows[0] || null
@@ -143,32 +143,53 @@ app.post('/me/ping', requireLogin, (req, res) => {
   res.json({ ok: true, at: Date.now() })
 })
 
+
 app.post('/auth/change-password', requireLogin, async (req, res) => {
   try {
-    const { current_password, new_password } = req.body || {}
-    if (!current_password || !new_password) {
-      return res.status(400).json({ ok: false, message: 'missing_fields' })
-    }
-    const { rows } = await pool.query(
-      'SELECT id, password_hash FROM public.users WHERE id = $1',
-      [req.session.userId]
-    )
-    const u = rows[0]
-    if (!u) return res.status(401).json({ ok: false })
-    const ok = await bcrypt.compare(current_password, u.password_hash)
-    if (!ok) return res.status(200).json({ ok: false, message: 'invalid_current_password' })
+    const uid = req.session?.userId
+    if (!uid) return res.status(401).json({ ok: false, message: 'not_logged_in' })
 
-    const hash = await bcrypt.hash(new_password, 10)
+    // Supporta due forme:
+    // 1) { password }                               -> solo nuova password
+    // 2) { current_password, new_password }         -> verifica quella attuale, poi aggiorna
+    const { password, current_password, new_password } = req.body || {}
+    const newPwd = (typeof new_password === 'string' && new_password.trim())
+      ? new_password.trim()
+      : (typeof password === 'string' && password.trim())
+        ? password.trim()
+        : ''
+
+    if (!newPwd) {
+      return res.status(400).json({ ok: false, message: 'missing_new_password' })
+    }
+
+    // Se è stata fornita la password corrente, validala
+    if (typeof current_password === 'string' && current_password.length > 0) {
+      const q = await pool.query(
+        'SELECT password_hash FROM public.users WHERE id = $1',
+        [uid]
+      )
+      const row = q.rows[0]
+      if (!row) return res.status(401).json({ ok: false, message: 'user_not_found' })
+      const ok = await bcrypt.compare(current_password, row.password_hash)
+      if (!ok) return res.status(200).json({ ok: false, message: 'invalid_current_password' })
+    }
+
+    // Aggiorna hash + imposta first_login = true
+    const hash = await bcrypt.hash(newPwd, 10)
     await pool.query(
-      'UPDATE public.users SET password_hash=$1, first_login=true WHERE id=$2',
-      [hash, req.session.userId]
+      'UPDATE public.users SET password_hash = $1, first_login = true WHERE id = $2',
+      [hash, uid]
     )
+
+    // (facoltativo) mantieni qualcosa in sessione, ma non è necessario
     return res.json({ ok: true })
   } catch (e) {
-    console.error('[/auth/change-password]', e)
+    console.error('[/auth/change-password] error:', e)
     return res.status(500).json({ ok: false, message: 'server_error' })
   }
 })
+
 
 
 // ---------- Log richieste (dev) ----------

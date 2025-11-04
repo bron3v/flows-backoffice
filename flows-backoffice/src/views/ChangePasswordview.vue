@@ -214,16 +214,27 @@ function goBack () {
 .muted{ color: #6b7280; }
 
 .form-group{ display: grid; gap: 8px; }
+/* —— Input “rossi” ——————————————————— */
 .input{
   width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #ef4444;       /* rosso */
   border-radius: 10px;
   padding: 10px 12px;
-  background: #f8fafc;
+  background: #fff5f5;             /* rosso molto chiaro */
   outline: none;
   font-size: 14px;
+  color: #991b1b;                  /* testo rosso scuro */
 }
-.input:focus{ border-color:#c7d2fe; box-shadow: 0 0 0 3px #eef2ff; }
+
+.input::placeholder{
+  color: #fca5a5;                  /* placeholder rosato */
+}
+
+.input:focus{
+  border-color:#dc2626;            /* rosso più saturo in focus */
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, .15);
+}
+
 
 .field-with-action{
   position: relative;
