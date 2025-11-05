@@ -96,7 +96,7 @@
                   <th>Utente</th>
                   <th>Online</th>
                   <th>Ruolo</th>
-                  <th class="t-right">Azioni</th>
+                  <th>Ultimo accesso</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,12 +118,13 @@
 
                   <td class="t-right">
                     <div class="actions">
-                      <button
-                        v-if="!isSelf(m)"
-                        class="icon-btn red"
-                        title="Delete"
-                        @click="removeUser(m)"
-                      >🗑</button>
+                      <button v-if="!isSelf(m)" class="icon-btn blue sm" title="Modifica" @click="editUser(m)">
+                        <span class="ico">✏︎</span>
+                      </button>
+
+                      <button v-if="!isSelf(m)" class="icon-btn red sm" title="Delete" @click="removeUser(m)">
+                        <span class="ico">🗑</span>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -672,6 +673,71 @@ window.addEventListener('flows:new-pending', (e) => {
   if (email && username) setPreferred(email, username)
 })
 
+/* ──────────────────────────────────────────────
+   LAST SEEN — helpers robusti
+   ────────────────────────────────────────────── */
+
+// Normalizza vari formati di timestamp (ms, sec, ISO)
+function toMs(t) {
+  if (t == null || t === '' || t === false) return 0
+  // numerico?
+  const n = Number(t)
+  if (!Number.isNaN(n) && Number.isFinite(n)) {
+    // euristica: se < 1e12 lo considero secondi, altrimenti millisecondi
+    return n < 1e12 ? n * 1000 : n
+  }
+  // stringa ISO o data
+  const d = new Date(String(t))
+  const ms = d.getTime()
+  return Number.isFinite(ms) ? ms : 0
+}
+
+// Estrae il lastSeen in ms da vari possibili campi BE
+function deriveLastSeenMs(obj) {
+  // ordine di priorità su diversi nomi comuni
+  const candidates = [
+    obj?.last_seen_ts, obj?.lastSeenTs,
+    obj?.last_seen, obj?.lastSeen,
+    obj?.last_seen_at, obj?.lastSeenAt, obj?.lastSeenISO,
+    obj?.user?.last_seen_ts, obj?.user?.last_seen, obj?.user?.lastSeenAt
+  ]
+  for (const c of candidates) {
+    const ms = toMs(c)
+    if (ms > 0) return ms
+  }
+  return 0
+}
+
+// Formatta "tempo fa" in italiano
+function timeAgo(ms) {
+  if (!ms || ms <= 0) return 'mai'
+  const diff = Date.now() - ms
+  if (diff < 0) return 'adesso'
+  const sec = Math.floor(diff / 1000)
+  if (sec < 60) return 'pochi secondi fa'
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min} min fa`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} h fa`
+  const d = Math.floor(hr / 24)
+  if (d < 30) return `${d} g fa`
+  const m = Math.floor(d / 30)
+  if (m < 12) return `${m} mesi fa`
+  const y = Math.floor(m / 12)
+  return `${y} anni fa`
+}
+
+// Ritorna la label pronta per la UI (“Ultimo accesso: …” / “Online”)
+function lastSeenText(u) {
+  // se il backend espone già "online"/"active" lo usiamo come verità di stato
+  const online = !!(u.online ?? u.active)
+  if (online) return 'online'
+  const ms = u.lastSeenMs || 0
+  const label = timeAgo(ms)
+  // se non abbiamo info → “mai”
+  return label === 'mai' ? 'ultimo accesso: mai' : `ultimo accesso: ${label}`
+}
+
 </script>
 
 <style scoped>
@@ -1079,6 +1145,30 @@ window.addEventListener('flows:new-pending', (e) => {
 /* Responsive */
 @media (max-width: 768px){
   .app-search{ flex:1 1 220px; }
+}
+
+.icon-btn { border: none; background: #f1f5f9; padding: 6px 8px; border-radius: 8px; cursor: pointer; margin-left: 6px; }
+.icon-btn:hover { filter: brightness(.96); }
+.icon-btn.green { color: #16a34a; }
+.icon-btn.red   { color: #ef4444; }
+.icon-btn.blue  { color: #2563eb; } 
+
+/* versione “stretta” uguale per tutti i bottoni icona */
+.icon-btn.sm{
+  width: 32px;
+  height: 32px;
+  padding: 0;                 /* niente padding, così è quadrato */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+/* normalizza la resa del glifo/emoji */
+.icon-btn .ico{
+  display: block;
+  font-size: 16px;            /* riduci se serve: 14–16px */
+  line-height: 1;
 }
 
 </style>
