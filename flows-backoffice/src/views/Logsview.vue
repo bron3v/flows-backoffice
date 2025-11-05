@@ -6,8 +6,7 @@
     <!-- Main -->
     <main class="main">
       <!-- Topbar -->
-      <!-- Topbar -->
-        <AppTopbar
+      <AppTopBar
         class="topbar-card full-bleed"
         title="Logs"
         v-model="q"
@@ -16,8 +15,7 @@
         :full-bleed="true"
         @search="onSearch"
         @profile="openProfile"
-        />
-
+      />
 
       <!-- Content -->
       <section class="content">
@@ -27,21 +25,24 @@
             <div class="kpi-icon errors"></div>
             <div>
               <div class="kpi-val">{{ kpi.errors }}</div>
-              <div class="kpi-label">Errori (24h)</div>
+              <div class="kpi-label">Errori</div>
             </div>
           </div>
           <div class="kpi">
-            <div class="kpi-icon warnings"></div>
-            <div>
-              <div class="kpi-val">{{ kpi.warnings }}</div>
-              <div class="kpi-label">Warning (24h)</div>
-            </div>
+          <div
+            class="kpi-icon warnings"
+            :style="{'--warn-icon': `url(${warningIcon})`}"
+          ></div>
+          <div>
+            <div class="kpi-val">{{ kpi.warnings }}</div>
+            <div class="kpi-label">Warning</div>
           </div>
+        </div>
           <div class="kpi">
-            <div class="kpi-icon reqs"></div>
+            <div class="kpi-icon reqs" :style="{'--reqs-icon': `url(${reqsIcon})`}"></div>
             <div>
               <div class="kpi-val">{{ kpi.rps }}</div>
-              <div class="kpi-label">Req/min (5m)</div>
+              <div class="kpi-label">Req/min ({{ minutesInRange }}m)</div>
             </div>
           </div>
         </div>
@@ -61,7 +62,7 @@
 
           <div class="filters">
             <div class="field">
-              <label>Livello</label>
+              <label>Selezione</label>
               <select v-model="level">
                 <option value="">Tutti</option>
                 <option value="error">error</option>
@@ -113,64 +114,63 @@
               </tr>
             </thead>
             <tbody>
-            <template v-for="row in paginated" :key="row.id">
+              <template v-for="row in paginated" :key="row.id">
                 <tr :class="{ expanded: isExpanded(row.id) }">
-                <td class="mono">
+                  <td class="mono">
                     <div>{{ fmtTime(row.ts) }}</div>
                     <small class="muted">{{ timeAgo(row.ts) }}</small>
-                </td>
-                <td>
+                  </td>
+                  <td>
                     <span :class="['badge', levelClass(row.level)]">{{ row.level }}</span>
-                </td>
-                <td>
+                  </td>
+                  <td>
                     <div class="msg">{{ row.message }}</div>
                     <small v-if="row.tags?.length" class="tags">
-                    <span v-for="t in row.tags" :key="t" class="tag">#{{ t }}</span>
+                      <span v-for="t in row.tags" :key="t" class="tag">#{{ t }}</span>
                     </small>
-                </td>
-                <td class="mono small">
+                  </td>
+                  <td class="mono small">
                     <div>{{ row.user || '—' }}</div>
                     <small class="muted">{{ row.ip || '' }}</small>
-                </td>
-                <td class="mono small">
+                  </td>
+                  <td class="mono small">
                     <div>{{ row.route || row.source || '—' }}</div>
                     <small class="muted">{{ row.requestId || '—' }}</small>
-                </td>
-                <td class="t-right">
+                  </td>
+                  <td class="t-right">
                     <div class="actions">
-                    <button class="icon-btn" @click="toggleExpand(row.id)">
+                      <button class="icon-btn" @click="toggleExpand(row.id)">
                         {{ isExpanded(row.id) ? '▲' : '▼' }}
-                    </button>
-                    <button class="icon-btn" @click="copy(row.requestId)" :disabled="!row.requestId">⧉</button>
+                      </button>
+                      <button class="icon-btn" @click="copy(row.requestId)" :disabled="!row.requestId">⧉</button>
                     </div>
-                </td>
+                  </td>
                 </tr>
 
                 <tr v-if="isExpanded(row.id)" :key="row.id + ':details'">
-                <td colspan="6" class="details">
+                  <td colspan="6" class="details">
                     <div class="grid">
-                    <div>
+                      <div>
                         <h4>Context</h4>
                         <pre class="pre">{{ pretty(row.context) }}</pre>
-                    </div>
-                    <div v-if="row.error">
+                      </div>
+                      <div v-if="row.error">
                         <h4>Error</h4>
                         <pre class="pre">{{ pretty(row.error) }}</pre>
-                    </div>
-                    <div v-if="row.meta">
+                      </div>
+                      <div v-if="row.meta">
                         <h4>Meta</h4>
                         <pre class="pre">{{ pretty(row.meta) }}</pre>
+                      </div>
                     </div>
-                    </div>
-                </td>
+                  </td>
                 </tr>
-            </template>
+              </template>
 
-            <tr v-if="!paginated.length">
+              <tr v-if="!paginated.length">
                 <td colspan="6" class="empty">Nessun log per i filtri selezionati.</td>
-            </tr>
+              </tr>
             </tbody>
-
           </table>
 
           <!-- Paginazione -->
@@ -189,14 +189,18 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
-import AppTopbar from '@/components/AppTopBar.vue'
+import AppTopBar from '@/components/AppTopBar.vue'
 import { api } from '@/utils/api'
+import warningIcon from '@/assets/warning.png'
+import reqsIcon from '@/assets/reqs.png'
 
 /* Stato base */
 const router = useRouter()
 const route = useRoute()
 const sessionUser = ref(null)
 const avatarInitial = ref('A')
+
+
 
 /* KPI */
 const kpi = ref({ errors: 0, warnings: 0, rps: 0 })
@@ -221,6 +225,15 @@ const pageSize = ref(20)
 /* Espansione righe */
 const expanded = ref(new Set())
 
+/* Range & label per KPI */
+const range = computed(() => {
+  const from = toEpoch(fromIso.value)
+  const to = toEpoch(toIso.value)
+  return { from, to }
+})
+const minutesInRange = computed(() => Math.max(1, Math.round((range.value.to - range.value.from) / 60000)))
+const rangeLabel = computed(() => `${fmtTimeShort(range.value.from)} → ${fmtTimeShort(range.value.to)}`)
+
 /* Lifecycle */
 let timer = null
 onMounted(async () => {
@@ -230,8 +243,9 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 
-/* Watch filtri: reset pagina */
-watch([q, level, fromIso, toIso], () => { page.value = 1 })
+/* Watch filtri: reset pagina + ricalcolo KPI */
+watch([q, level], () => { page.value = 1 })
+watch([fromIso, toIso], () => { page.value = 1; updateKpi() })
 
 /* Helpers sessione */
 async function ensureSession () {
@@ -252,10 +266,9 @@ async function refreshNow () {
   loading.value = true
   err.value = ''
   try {
-    // Prova API tipica: /admin/api/logs?from=&to=&level=&q=&page=&pageSize=
     const params = {
-      from: toEpoch(fromIso.value),
-      to: toEpoch(toIso.value),
+      from: range.value.from,
+      to: range.value.to,
       level: level.value || undefined,
       q: q.value || undefined,
       page: 1,
@@ -271,7 +284,7 @@ async function refreshNow () {
     console.warn('[Logs] using local sample. Cause:', e?.message || e)
     logs.value = normalizeLogs(sampleLogs())
     updateKpi()
-    err.value = '' // opzionale: mostrare un messaggio
+    err.value = '' // opzionale: messaggio user-friendly
   } finally {
     loading.value = false
   }
@@ -289,8 +302,8 @@ async function fetchFallback (params) {
 const filteredLogs = computed(() => {
   const term = q.value.trim().toLowerCase()
   const L = level.value
-  const from = toEpoch(fromIso.value)
-  const to = toEpoch(toIso.value)
+  const from = range.value.from
+  const to = range.value.to
 
   return logs.value.filter(r => {
     if (L && r.level !== L) return false
@@ -325,36 +338,43 @@ async function copy(s){
   try { await navigator.clipboard.writeText(s) } catch {}
 }
 
-/* KPI helpers */
+/* KPI helpers — allineati al range Da/A */
 function updateKpi(){
-  const now = Date.now()
-  const dayAgo = now - 24*60*60*1000
-  const in24h = logs.value.filter(r => r.ts >= dayAgo)
-  kpi.value.errors = in24h.filter(r => r.level === 'error').length
-  kpi.value.warnings = in24h.filter(r => r.level === 'warn').length
-  // Req/min “finto”: calcolato su 5 minuti usando count totale degli info/debug route
-  const five = now - 5*60*1000
-  const reqs5 = logs.value.filter(r => r.ts >= five && ['info','debug'].includes(r.level)).length
-  kpi.value.rps = Math.round((reqs5 / 5) * 10) / 10
+  const from = range.value.from
+  const to = range.value.to
+  const inRange = logs.value.filter(r => r.ts >= from && r.ts <= to)
+  kpi.value.errors   = inRange.filter(r => r.level === 'error').length
+  kpi.value.warnings = inRange.filter(r => r.level === 'warn').length
+
+  // Media richieste per minuto sul range selezionato
+  const minutes = minutesInRange.value
+  const reqs = inRange.filter(r => ['info','debug'].includes(r.level)).length
+  kpi.value.rps = Math.round((reqs / minutes) * 10) / 10
 }
 
-/* Normalizzazione */
+/* Normalizzazione — fix s→ms */
 function normalizeLogs(list){
-  return (list||[]).map((r,i) => ({
-    id: r.id ?? `${r.requestId||'noid'}:${i}`,
-    ts: Number(r.ts ?? r.timestamp ?? Date.now()),
-    level: String(r.level || 'info').toLowerCase(),
-    message: r.message || '',
-    user: r.user || r.username || '',
-    ip: r.ip || r.remoteAddr || '',
-    route: r.route || r.path || r.endpoint || '',
-    source: r.source || r.service || '',
-    requestId: r.requestId || r.reqId || '',
-    tags: r.tags || [],
-    context: r.context || r.ctx || null,
-    error: r.error || r.err || null,
-    meta: r.meta || null
-  }))
+  return (list||[]).map((r,i) => {
+    let ts = Number(r.ts ?? r.timestamp ?? Date.now())
+    // Se arriva in secondi (es. 1699000000), converti in ms
+    if (ts > 0 && ts < 1e12) ts *= 1000
+
+    return {
+      id: r.id ?? `${r.requestId||'noid'}:${i}`,
+      ts,
+      level: String(r.level || 'info').toLowerCase(),
+      message: r.message || '',
+      user: r.user || r.username || '',
+      ip: r.ip || r.remoteAddr || '',
+      route: r.route || r.path || r.endpoint || '',
+      source: r.source || r.service || '',
+      requestId: r.requestId || r.reqId || '',
+      tags: r.tags || [],
+      context: r.context || r.ctx || null,
+      error: r.error || r.err || null,
+      meta: r.meta || null
+    }
+  })
 }
 
 /* Utils tempo */
@@ -373,6 +393,11 @@ function fmtTime(ms){
   const dt = new Date(ms)
   const pad = (n)=> String(n).padStart(2,'0')
   return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
+}
+function fmtTimeShort(ms){
+  const dt = new Date(ms)
+  const pad = (n)=> String(n).padStart(2,'0')
+  return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`
 }
 function nowIso(){
   const d = new Date()
@@ -467,8 +492,103 @@ function levelClass(l){
 .kpi-label{ color:#64748b; }
 .kpi-icon{ width:42px; height:42px; border-radius:12px; }
 .kpi-icon.errors{ background:#fef2f2; }
-.kpi-icon.warnings{ background:#fffbeb; }
-.kpi-icon.reqs{ background:#ecfeff; }
+
+
+/* rende il box pronto ad accogliere il contenuto */
+.kpi-icon{
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* REQ/MIN: box + icona con spessore regolabile */
+.kpi-icon.reqs{
+  --reqs-size: 20px;       /* dimensione icona */
+  --reqs-weight: 1.08;     /* >1 = più spessa (1.04–1.15 consigliato) */
+  --reqs-color: #06b6d4;   /* colore icona (cyan/teal) */
+
+  background:#ecfeff;      /* riquadro chiaro */
+  border-radius:12px;
+  position:relative;
+}
+
+/* layer “stroke” (sotto) per dare spessore */
+.kpi-icon.reqs::before{
+  content:'';
+  position:absolute; top:50%; left:50%;
+  width:calc(var(--reqs-size) * var(--reqs-weight));
+  height:calc(var(--reqs-size) * var(--reqs-weight));
+  transform:translate(-50%, -50%);
+  background-color:var(--reqs-color);
+  -webkit-mask: var(--reqs-icon) center/contain no-repeat;
+  mask: var(--reqs-icon) center/contain no-repeat;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* layer icona “normale” sopra */
+.kpi-icon.reqs::after{
+  content:'';
+  position:absolute; top:50%; left:50%;
+  width:var(--reqs-size);
+  height:var(--reqs-size);
+  transform:translate(-50%, -50%);
+  background-color:var(--reqs-color);
+  -webkit-mask: var(--reqs-icon) center/contain no-repeat;
+  mask: var(--reqs-icon) center/contain no-repeat;
+  pointer-events:none;
+  z-index:1;
+}
+
+
+
+/* X rossa nel riquadro Errori */
+.kpi-icon.errors::before{
+  content: 'X';           /* oppure '×' se preferisci */
+  font-size: 20px;        /* adatta se vuoi più grande/piccola */
+  font-weight: 800;
+  line-height: 1;
+  color: #ef4444;         /* rosso */
+}
+
+.kpi-icon.warnings{
+  --warn-size: 20px;   /* dimensione icona */
+  --warn-weight: 1.08; /* < 1.20 -> meno grosso (prova 1.04–1.10) */
+
+  background:#fff0d2;
+  border-radius:12px;
+  position:relative;
+}
+
+.kpi-icon.warnings::before{
+  content:'';
+  position:absolute; top:50%; left:50%;
+  width:calc(var(--warn-size) * var(--warn-weight));
+  height:calc(var(--warn-size) * var(--warn-weight));
+  transform:translate(-50%, -50%);
+  background-color:#f4b909;
+  -webkit-mask: var(--warn-icon) center/contain no-repeat;
+  mask: var(--warn-icon) center/contain no-repeat;
+  pointer-events:none;
+  z-index:0;
+}
+
+.kpi-icon.warnings::after{
+  content:'';
+  position:absolute; top:50%; left:50%;
+  width:var(--warn-size);
+  height:var(--warn-size);
+  transform:translate(-50%, -50%);
+  background-color:#f4b909;
+  -webkit-mask: var(--warn-icon) center/contain no-repeat;
+  mask: var(--warn-icon) center/contain no-repeat;
+  pointer-events:none;
+  z-index:1;
+}
+
+
+
+
 
 /* Filtri */
 .filters{ display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:12px; padding:12px 14px; }
@@ -500,13 +620,13 @@ function levelClass(l){
 .muted-chip{ background:#f1f5f9; color:#475569; }
 
 /* Azioni */
-.icon-btn{ border:none; background:#f1f5f9; padding:6px 8px; border-radius:8px; cursor:pointer; }
+.icon-btn{ border:none; background:#f1f5f9; padding:6px 8px; border-radius:8px; cursor:pointer; color:#475569;}
 .icon-btn:hover{ filter:brightness(.96); }
 .actions{ display:flex; gap:8px; justify-content:flex-end; }
 
 /* Dettagli */
-.details{ background:#fcfcfd; }
-.details .grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px; }
+.details{ background:#fcfcfd; color:#475569;}
+.details .grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px; color:#475569;}
 .pre{ margin:0; max-height:280px; overflow:auto; background:#0b1020; color:#e5e7eb; padding:10px; border-radius:8px; }
 
 /* Pager */
@@ -521,4 +641,71 @@ function levelClass(l){
 @media (max-width: 720px){
   .kpi-row{ grid-template-columns:1fr; }
 }
+
+
+.filters input,
+.filters select,
+.search-input{
+  color:#475569; 
+}
+
+
+.filters input::placeholder,
+.search-input::placeholder{
+  color:#475569;
+  opacity:1; 
+}
+
+
+.filters select option{
+  color:#475569;
+}
+
+/* Checkbox custom: box verde + spunta bianca */
+.checkbox,
+.switch input[type="checkbox"]{
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #94a3b8;
+  border-radius: 4px;
+  background: #fff;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+
+/* Stato selezionato: fondo verde */
+.checkbox:checked,
+.switch input[type="checkbox"]:checked{
+  background: #22c55e;
+  border-color: #22c55e;
+}
+
+/* Spunta (tick) disegnata in bianco */
+.checkbox::after,
+.switch input[type="checkbox"]::after{
+  content: "";
+  width: 8px;
+  height: 4px;
+  border: 2px solid transparent;
+  border-top: none;
+  border-right: none;
+  transform: rotate(-45deg) scale(0);
+  transition: transform .12s ease;
+}
+
+/* Mostra la spunta quando selezionato */
+.checkbox:checked::after,
+.switch input[type="checkbox"]:checked::after{
+  border-left-color: #fff;   /* spunta bianca */
+  border-bottom-color: #fff; /* spunta bianca */
+  transform: rotate(-45deg) scale(1);
+}
+
+
+
 </style>
