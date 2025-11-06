@@ -100,35 +100,58 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="m in filteredTeam" :key="m.id">
-                  <td class="person">
-                    <img :src="m.avatar || defaultAvatar" alt="" />
-                    <div>
-                      <div class="name">{{ m.name }}</div>
+  <tr v-for="m in filteredTeam" :key="m.id">
+    <!-- Utente -->
+    <td class="person">
+      <img :src="m.avatar || defaultAvatar" alt="" />
+      <div>
+        <div class="name">{{ m.name }}</div>
+        <div class="email">{{ m.email }}</div>
+      </div>
+    </td>
 
-                    </div>
-                  </td>
+    <!-- Online -->
+    <td>
+      <span class="badge success" v-if="m.active">Online</span>
+      <span class="badge danger" v-else>Offline</span>
+    </td>
 
-                  <td>
-                    <span class="badge success" v-if="m.active">Online</span>
-                    <span class="badge danger"  v-else>Offline</span>
-                  </td>
+    <!-- Ruolo -->
+    <td class="role">{{ prettyRole(m.role) }}</td>
 
-                  <td class="role">{{ prettyRole(m.role) }}</td>
+    <!-- Ultimo accesso -->
+    <td>
+      <span v-if="m.active" class="chip online">Online ora</span>
+      <span v-else class="chip offline">
+        Ultimo accesso: {{ timeAgo(m.lastSeenTs) }}
+      </span>
+    </td>
 
-                  <td class="t-right">
-                    <div class="actions">
-                      <button v-if="!isSelf(m)" class="icon-btn blue sm" title="Modifica" @click="editUser(m)">
-                        <span class="ico">✏︎</span>
-                      </button>
+    <!-- Azioni -->
+    <td class="t-right">
+      <div class="actions">
+        <button
+          v-if="!isSelf(m)"
+          class="icon-btn blue sm"
+          title="Modifica"
+          @click="editUser(m)"
+        >
+          <span class="ico">✏︎</span>
+        </button>
 
-                      <button v-if="!isSelf(m)" class="icon-btn red sm" title="Delete" @click="removeUser(m)">
-                        <span class="ico">🗑</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
+        <button
+          v-if="!isSelf(m)"
+          class="icon-btn red sm"
+          title="Delete"
+          @click="removeUser(m)"
+        >
+          <span class="ico">🗑</span>
+        </button>
+      </div>
+    </td>
+  </tr>
+</tbody>
+
             </table>
           </div>
         </section>
@@ -1170,5 +1193,24 @@ function lastSeenText(u) {
   font-size: 16px;            /* riduci se serve: 14–16px */
   line-height: 1;
 }
+
+.chip {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chip.online {
+  background: #ecfdf5;
+  color: #16a34a;
+}
+
+.chip.offline {
+  background: #f3f4f6;
+  color: #374151;
+}
+
 
 </style>
