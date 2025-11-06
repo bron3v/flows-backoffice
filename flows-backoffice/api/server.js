@@ -395,7 +395,6 @@ adminApi.delete('/users/:id', requireLogin, async (req, res) => {
   }
 })
 
-// Approva: crea utente + invio credenziali se email presente
 function genPassword (len = 14) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
   let out = ''
@@ -426,7 +425,6 @@ adminApi.post('/approvals/approve', async (req, res) => {
     const finalUsername = (username || email).toLowerCase()
     const plainPwd = genPassword()
 
-    // CreateUser inserisce username/password_hash e rispetta il default 'user'
     const user = await createUser(finalUsername, plainPwd)
     if (!user) {
       return res.status(409).json({ ok: false, message: 'user_exists' })
@@ -518,7 +516,7 @@ async function cleanupExpiredSessions() {
   }
 }
 cleanupExpiredSessions()
-setInterval(cleanupExpiredSessions, 60 * 60 * 1000) // ogni ora
+setInterval(cleanupExpiredSessions, 60 * 60 * 1000) 
 
 // ---------- Avvio ----------
 const PORT = process.env.PORT || 3000
