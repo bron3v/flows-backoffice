@@ -101,58 +101,57 @@
                 </tr>
               </thead>
               <tbody>
-  <tr v-for="m in filteredTeam" :key="m.id">
-    <!-- Utente -->
-    <td class="person">
-      <img :src="m.avatar || defaultAvatar" alt="" />
-      <div>
-        <div class="name">{{ m.name }}</div>
-        <div class="email">{{ m.email }}</div>
-      </div>
-    </td>
+                <tr v-for="m in filteredTeam" :key="m.id">
+                  <!-- Utente -->
+                  <td class="person">
+                    <img :src="m.avatar || defaultAvatar" alt="" />
+                    <div>
+                      <div class="name">{{ m.name }}</div>
+                      <div class="email">{{ m.email }}</div>
+                    </div>
+                  </td>
 
-    <!-- Online -->
-    <td>
-      <span class="badge success" v-if="m.active">Online</span>
-      <span class="badge danger" v-else>Offline</span>
-    </td>
+                  <!-- Online -->
+                  <td>
+                    <span class="badge success" v-if="m.active">Online</span>
+                    <span class="badge danger" v-else>Offline</span>
+                  </td>
 
-    <!-- Ruolo -->
-    <td class="role">{{ prettyRole(m.role) }}</td>
+                  <!-- Ruolo -->
+                  <td class="role">{{ prettyRole(m.role) }}</td>
 
-    <!-- Ultimo accesso -->
-    <td>
-      <span v-if="m.active" class="chip online">Online ora</span>
-      <span v-else class="chip offline">
-       {{ timeAgo(m.lastSeenTs) }}
-      </span>
-    </td>
+                  <!-- Ultimo accesso -->
+                  <td>
+                    <span v-if="m.active" class="chip online">Online ora</span>
+                    <span v-else class="chip offline">
+                    {{ timeAgo(m.lastSeenTs) }}
+                    </span>
+                  </td>
 
-    <!-- Azioni -->
-    <td class="t-right">
-      <div class="actions">
-        <button
-          v-if="!isSelf(m)"
-          class="icon-btn blue sm"
-          title="Modifica"
-          @click="editUser(m)"
-        >
-          <span class="ico">✏︎</span>
-        </button>
+                  <!-- Azioni -->
+                  <td class="t-right">
+                    <div class="actions">
+                      <button
+                        v-if="!isSelf(m)"
+                        class="icon-btn blue sm"
+                        title="Modifica"
+                        @click="editUser(m)"
+                      >
+                        <span class="ico">✏︎</span>
+                      </button>
 
-        <button
-          v-if="!isSelf(m)"
-          class="icon-btn red sm"
-          title="Delete"
-          @click="removeUser(m)"
-        >
-          <span class="ico">🗑</span>
-        </button>
-      </div>
-    </td>
-  </tr>
-</tbody>
-
+                      <button
+                        v-if="!isSelf(m)"
+                        class="icon-btn red sm"
+                        title="Delete"
+                        @click="removeUser(m)"
+                      >
+                        <span class="ico">🗑</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </section>
@@ -295,10 +294,6 @@ function prettyRole(role) {
   })[k] || (k ? k.charAt(0).toUpperCase() + k.slice(1) : 'User');
 }
 
-function displayRole(u) {
-  // fallback robusto: label → pretty(role) → 'User'
-  return u?.roleLabel || prettyRole(u?.role) || 'User'
-}
 
 function normalizePendingList(list) {
   return (list || []).map(p => {
@@ -354,12 +349,21 @@ function mergePending(localList, serverList) {
 }
 
 function toTs(v) {
-  if (v == null) return null;
-  // accetta number (epoch ms/s) o stringhe ISO
-  if (typeof v === 'number') return v > 1e12 ? v : v * 1000;
-  const n = Date.parse(String(v));
-  return Number.isNaN(n) ? null : n;
+  // niente valore / zero / stringa "0" => nessun last seen
+  if (v == null || v === '' || v === 0 || v === '0') return null
+
+  const n = Number(v)
+
+  if (!Number.isNaN(n) && Number.isFinite(n)) {
+    if (n <= 0) return null
+    // se è in secondi (< 1e12) converto in ms, se è già ms lo lascio
+    return n < 1e12 ? n * 1000 : n
+  }
+
+  const parsed = Date.parse(String(v))
+  return !Number.isNaN(parsed) && parsed > 0 ? parsed : null
 }
+
 
 
 // --- bootstrap pagina ---
@@ -448,7 +452,7 @@ team.value = items.map(u => {
   const rawRole = (u.role || u.user?.role || '').toString().toLowerCase()
 
   // prendi il timestamp dal primo campo disponibile tra quelli comuni
-  const lastSeenTs =
+    const lastSeenTs =
     toTs(u.lastSeenTs) ??
     toTs(u.last_seen_ts) ??
     toTs(u.lastSeen) ??
@@ -459,7 +463,8 @@ team.value = items.map(u => {
     toTs(u.lastActiveAt) ??
     toTs(u.last_active_at) ??
     toTs(u.heartbeat) ??
-    toTs(u.updated_at) ?? null;
+    null
+
 
   return {
     id: u.id ?? null,
@@ -732,23 +737,23 @@ function deriveLastSeenMs(obj) {
   return 0
 }
 
-// Formatta "tempo fa" in italiano
+
+// utils time-ago minimale
 function timeAgo(ms) {
-  if (!ms || ms <= 0) return 'mai'
-  const diff = Date.now() - ms
-  if (diff < 0) return 'adesso'
-  const sec = Math.floor(diff / 1000)
-  if (sec < 60) return 'pochi secondi fa'
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min} min fa`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr} h fa`
-  const d = Math.floor(hr / 24)
-  if (d < 30) return `${d} g fa`
-  const m = Math.floor(d / 30)
-  if (m < 12) return `${m} mesi fa`
-  const y = Math.floor(m / 12)
-  return `${y} anni fa`
+  if (!ms || ms <= 0) return 'mai';
+  const diff = Date.now() - ms;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'pochi secondi fa';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min fa`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} h fa`;
+  const d = Math.floor(hr / 24);
+  if (d < 30) return `${d} g fa`;
+  const m = Math.floor(d / 30);
+  if (m < 12) return `${m} mesi fa`;
+  const y = Math.floor(m / 12);
+  return `${y} anni fa`;
 }
 
 // Ritorna la label pronta per la UI (“Ultimo accesso: …” / “Online”)
