@@ -97,6 +97,7 @@
                   <th>Online</th>
                   <th>Ruolo</th>
                   <th>Ultimo accesso</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +124,7 @@
     <td>
       <span v-if="m.active" class="chip online">Online ora</span>
       <span v-else class="chip offline">
-        Ultimo accesso: {{ timeAgo(m.lastSeenTs) }}
+       {{ timeAgo(m.lastSeenTs) }}
       </span>
     </td>
 
