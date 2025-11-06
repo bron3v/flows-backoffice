@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// Lazy routes (nomi file come sono sul disco)
+// Routes
 const Home  = () => import('../views/Homeview.vue')
 const Login = () => import('../views/Loginview.vue')
 const Users = () => import('../views/Usersview.vue')
@@ -28,24 +28,12 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-// --- mini helper cache
+//Helper cache
 function safeSet(k, v) { try { sessionStorage.setItem(k, v) } catch {} }
-// esportiamo per i componenti (es. logout/login)
+// Esportazione per i componenti (es. logout/login)
 export function markLoggedIn ()  { safeSet('flows_logged', '1'); safeSet('flows_logged_ts', String(Date.now())) }
 export function markLoggedOut () { safeSet('flows_logged', '0'); safeSet('flows_logged_ts', String(Date.now())) }
 
-// ping /me con timeout (non usato nel guard, ma lo lasciamo pronto)
-async function meWithTimeout(ms = 2500) {
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort('timeout'), ms)
-  try {
-    const r = await fetch('/me', { credentials: 'include', cache: 'no-store', signal: ctrl.signal })
-    if (!r.ok) return false
-    const j = await r.json().catch(() => null)
-    return j && j.ok === true
-  } catch { return false }
-  finally { clearTimeout(t) }
-}
 
 // Guardie
 const AUTH_CACHE_KEY = 'flows_logged'
@@ -55,7 +43,7 @@ function isLogged() {
 function getRole() {
   try { return (sessionStorage.getItem('flows_role') || '').toLowerCase() } catch { return '' }
 }
-const ALLOWED = new Set(['admin','user_manager','logs_manager']) // 'user' fuori dalle pagine protette
+const ALLOWED = new Set(['admin','user_manager','logs_manager', 'user']) 
 
 router.beforeEach(async (to, _from, next) => {
   if (to.meta && to.meta.public) return next()

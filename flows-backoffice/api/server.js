@@ -1,4 +1,3 @@
-// api/server.js
 const path = require('path')
 require('dotenv').config({ path: path.join(__dirname, '.env') })
 
@@ -15,7 +14,7 @@ const app = express()
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: false, // abilita solo se necessario
+      ssl: false, 
       max: 10,
       idleTimeoutMillis: 30000
     })
@@ -33,8 +32,6 @@ const pool = process.env.DATABASE_URL
 pool.on('connect', (client) => {
   client.query('SET search_path TO public')
 })
-
-// 👇 QUI: assicurati la colonna last_seen_ts
 ;(async () => {
   try {
     await pool.query(`
@@ -89,13 +86,13 @@ function checkPassword (user, plain) {
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
 
-// ---------- Sessioni (condivise su Postgres) ----------
+// ---------- Sessioni  ----------
 app.use(session({
   store: new pgSession({
     pool,
     schemaName: 'public',
     tableName: 'session',
-    createTableIfMissing: true, // utile in dev
+    createTableIfMissing: true, 
   }),
   secret: process.env.SESSION_SECRET || 'change-me-in-prod',
   resave: false,
@@ -104,14 +101,11 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
     secure: false, // in dev
-    maxAge: 14 * 24 * 60 * 60 * 1000, // 14 giorni
+    maxAge: 14 * 24 * 60 * 60 * 1000, 
   }
 }))
 
-// ---------- Heartbeat lastSeen (max 1/min) ----------
-// ---------- Heartbeat lastSeen (aggiorna SUBITO al primo hit, poi max 1/min) ----------
-// Heartbeat: aggiorna lastSeenTs max 1 volta ogni 15s
-// Heartbeat: aggiorna lastSeenTs max 1 volta ogni 15s
+// ---------- Heartbeat lastSeen  ----------
 app.use((req, res, next) => {
   if (!req.session) return next()
   const now  = Date.now()
@@ -122,7 +116,6 @@ app.use((req, res, next) => {
     // salva la sessione
     req.session.save(() => {})
 
-    // se l'utente è noto, aggiorna anche la tabella users (best effort, no await)
     const uid = req.session.userId
     if (uid) {
       pool.query(
@@ -136,10 +129,7 @@ app.use((req, res, next) => {
   next()
 })
 
-
-// subito dopo gli altri endpoint "auth/*"
 app.post('/me/ping', requireLogin, (req, res) => {
-  // il middleware sopra aggiorna req.session.lastSeenTs
   res.json({ ok: true, at: Date.now() })
 })
 
@@ -148,10 +138,6 @@ app.post('/auth/change-password', requireLogin, async (req, res) => {
   try {
     const uid = req.session?.userId
     if (!uid) return res.status(401).json({ ok: false, message: 'not_logged_in' })
-
-    // Supporta due forme:
-    // 1) { password }                               -> solo nuova password
-    // 2) { current_password, new_password }         -> verifica quella attuale, poi aggiorna
     const { password, current_password, new_password } = req.body || {}
     const newPwd = (typeof new_password === 'string' && new_password.trim())
       ? new_password.trim()
@@ -175,14 +161,13 @@ app.post('/auth/change-password', requireLogin, async (req, res) => {
       if (!ok) return res.status(200).json({ ok: false, message: 'invalid_current_password' })
     }
 
-    // Aggiorna hash + imposta first_login = true
+    // Aggiornamento hash + imposta first_login = true
     const hash = await bcrypt.hash(newPwd, 10)
     await pool.query(
       'UPDATE public.users SET password_hash = $1, first_login = true WHERE id = $2',
       [hash, uid]
     )
 
-    // (facoltativo) mantieni qualcosa in sessione, ma non è necessario
     return res.json({ ok: true })
   } catch (e) {
     console.error('[/auth/change-password] error:', e)
@@ -219,31 +204,18 @@ app.post('/auth/login', async (req, res) => {
     req.session.userId   = user.id;
     req.session.user     = { id: user.id, username: user.username, role: user.role };
 
-    // --- last seen: salva subito (ms epoch) ---
     const now = Date.now();
     req.session.lastSeenTs = now;
 
-    // salva la sessione; non bloccare la risposta se fallisce il save asincrono
+    // Salvataggio sessione. Non blocca la risposta se fallisce il save asincrono
     req.session.save(() => {});
 
-    // persisti anche su users.last_seen_ts (così resta visibile anche dopo logout)
     pool.query(
       `UPDATE public.users
          SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
        WHERE id = $2`,
       [now, user.id]
-    ).catch(() => { /* best-effort */ });
-
-    // (opzionale) se ti serve ancora avere un campo "lastSeen" testuale nella sessione pg:
-    // pool.query(
-    //   `UPDATE public.session
-    //      SET sess = (jsonb_set(sess::jsonb, '{lastSeen}',
-    //               to_jsonb(to_timestamp($1/1000)::timestamptz::text), true))::json
-    //    WHERE sid = $2`,
-    //   [now, req.sessionID]
-    // ).catch(()=>{});
-
-    // risposta (mantieni shape attuale)
+    ).catch(() => {});
     return res.json({
       ok: true,
       user: {
@@ -268,7 +240,7 @@ app.post('/auth/logout', requireLogin, async (req, res) => {
     const uid = req.session?.userId || null;
     const now = Date.now();
 
-    // best-effort: persisti l’ultimo accesso anche se la sessione sta per sparire
+    // Mantenimento dell'ultimo accesso anche se la sessione sta per scadere
     if (uid) {
       await pool.query(
         `UPDATE public.users
@@ -278,7 +250,7 @@ app.post('/auth/logout', requireLogin, async (req, res) => {
       ).catch(() => {}); 
     }
 
-    // distruggi la sessione e pulisci il cookie
+    // Distruzione della sessione e pulizia coockie
     req.session.destroy(err => {
       res.clearCookie('connect.sid', { path: '/' });
       if (err) {
@@ -339,10 +311,7 @@ function requireLogin (req, res, next) {
 // ---------- Router admin protetto ----------
 const adminApi = express.Router()
 
-// Definizione "ONLINE": sessione valida + lastSeen negli ultimi 10 minuti
-const ONLINE_WINDOW_SQL = `NOW() - INTERVAL '10 minutes'`
 
-// Stats coerenti con la definizione di ONLINE
 adminApi.get('/stats', async (_req, res) => {
   try {
     const qTotal = `SELECT COUNT(*)::int AS total FROM public.users`
@@ -378,8 +347,6 @@ adminApi.get('/users/me', (req, res) => {
   res.json({ ok: true, user: req.session.user })
 })
 
-// Lista utenti + flag online (definizione coerente con stats)
-// Lista utenti: "online" da sessioni attive, "ultimo accesso" da users.last_seen_ts
 adminApi.get('/users', async (_req, res) => {
   try {
     const sql = `
@@ -410,7 +377,7 @@ adminApi.get('/users', async (_req, res) => {
 
 
 
-// DELETE utente per id – no self-delete
+// DELETE utente per id 
 adminApi.delete('/users/:id', requireLogin, async (req, res) => {
   const targetId = String(req.params.id)
   const myId = String(req.session?.user?.id || '')
@@ -428,7 +395,7 @@ adminApi.delete('/users/:id', requireLogin, async (req, res) => {
   }
 })
 
-// Approva: crea utente + invio credenziali (se email presente)
+// Approva: crea utente + invio credenziali se email presente
 function genPassword (len = 14) {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*'
   let out = ''
@@ -436,7 +403,7 @@ function genPassword (len = 14) {
   return out
 }
 
-// POST /admin/api/approvals/approve
+
 adminApi.post('/approvals/approve', async (req, res) => {
   try {
     const { name, email, username, requested_role } = req.body || {}
@@ -450,16 +417,16 @@ adminApi.post('/approvals/approve', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'invalid_email' })
     }
 
-    // ---- ruolo richiesto (whitelist + default) ----
+   
     const ALLOWED = new Set(['user','user_manager','logs_manager','admin'])
     const finalRole = (requested_role || '').toString().toLowerCase()
     const roleToAssign = ALLOWED.has(finalRole) ? finalRole : 'user'
 
-    // ---- creazione utente ----
+    // Creazione utente 
     const finalUsername = (username || email).toLowerCase()
     const plainPwd = genPassword()
 
-    // createUser inserisce username/password_hash e rispetta il default 'user'
+    // CreateUser inserisce username/password_hash e rispetta il default 'user'
     const user = await createUser(finalUsername, plainPwd)
     if (!user) {
       return res.status(409).json({ ok: false, message: 'user_exists' })
@@ -473,14 +440,14 @@ adminApi.post('/approvals/approve', async (req, res) => {
       )
     }
 
-    // ricarica i dati completi (id, username, role)
+    // Ricarica i dati completi 
     const { rows } = await pool.query(
       'SELECT id, username, role FROM public.users WHERE id = $1',
       [user.id]
     )
     const outUser = rows[0]
 
-    // ---- email con credenziali (opzionale) ----
+    //Email con credenziali 
     if (email) {
       const subject = 'Il tuo accesso a Flows Backoffice'
       const loginUrl = process.env.LOGIN_URL || 'http://localhost:5173/login'
@@ -513,8 +480,8 @@ Accedi: ${loginUrl}
       })
     }
 
-    // ---- risposta ----
-    return res.json({ ok: true, user: outUser }) // { id, username, role }
+    // risposta 
+    return res.json({ ok: true, user: outUser }) 
   } catch (err) {
     console.error('[/admin/api/approvals/approve] error:', err)
     return res.status(500).json({ ok: false, message: 'server_error' })

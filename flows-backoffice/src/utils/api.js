@@ -1,12 +1,6 @@
-// src/utils/api.js
 import router, { markLoggedOut } from '@/router'
 
-/**
- * Richiesta HTTP con:
- * - credenziali incluse
- * - parsing JSON/text sicuro
- * - gestione 401 centralizzata (con possibilità di skipare il redirect)
- */
+// Richiesta HTTP con
 export async function request(
   path,
   { method = 'GET', body, headers, skipAuthRedirect = false } = {}
@@ -28,7 +22,7 @@ export async function request(
     ? await res.json().catch(() => ({}))
     : await res.text().catch(() => '')
 
-  // Route corrente (per capire se è pubblica)
+  // Route corrente 
   const current = router.currentRoute?.value
   const onPublicRoute = Boolean(current && current.meta && current.meta.public)
   const shouldSkip = Boolean(skipAuthRedirect || onPublicRoute)
@@ -40,7 +34,7 @@ export async function request(
     err.data = payload
 
     if (!shouldSkip) {
-      // invalidiamo stato locale e portiamo al login con redirect di ritorno
+      // invalida stato locale e porta al login con redirect
       markLoggedOut?.()
       const isLoginRoute = current?.path?.startsWith('/login')
       const where = location.pathname + location.search + location.hash
@@ -62,14 +56,10 @@ export async function request(
   return payload
 }
 
-/**
- * Wrapper di comodo per le API dell’app.
- * Restituisce sempre l’oggetto payload del backend (di solito { ok: boolean, ... }).
- */
-export const api = {
-  // --- Auth ---
+// Wrapper di comodo per le API dell’app. Restituisce sempre l’oggetto payload del backend.
+export const api = { 
   async login(username, password) {
-    // /auth/login torna 200 anche per credenziali errate con { ok:false, message:'invalid_credentials' }
+    // /auth/login restituisce 200 anche per credenziali errate con { ok:false, message:'invalid_credentials' }
     return request('/auth/login', {
       method: 'POST',
       body: { username, password }
@@ -84,13 +74,7 @@ export const api = {
     return request('/me')
   },
 
-  /**
-   * Cambia password.
-   * Supporta:
-   *  - { password }                          -> solo nuova password
-   *  - { current_password, new_password }    -> verifica quella attuale, poi aggiorna
-   * Il backend imposta first_login=true al successo.
-   */
+  //Cambio password per nuovi utenti
   async changePassword({ password, current_password, new_password } = {}) {
     const body =
       typeof current_password === 'string' && typeof new_password === 'string'
@@ -103,7 +87,7 @@ export const api = {
     })
   },
 
-  // --- KPI / Utenti protetti ---
+
   stats() {
     return request('/admin/api/stats')
   },
@@ -118,11 +102,7 @@ export const api = {
     })
   },
 
-  // --- Approval flow ---
-  /**
-   * Endpoint pubblico: non fare redirect automatico al login su eventuali 401.
-   * Se /auth/request-approval non esiste, fallback su /admin/api/approvals/request.
-   */
+
   requestApproval({ name, email, username, role, requested_role }) {
     const r = role ?? requested_role
     return request('/auth/request-approval', {
