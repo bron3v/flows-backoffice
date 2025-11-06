@@ -8,7 +8,7 @@
       <!-- Topbar identica alla prima pagina -->
       <AppTopbar
         class="topbar-card full-bleed"
-        title="Dashboard"
+        title="Utenti"
         v-model="q"
         :session-user="sessionUser"
         :avatar-initial="avatarInitial"
