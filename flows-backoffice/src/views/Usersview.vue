@@ -1056,11 +1056,7 @@ function editUser(u) {
 .pending-item .meta small {
   color: #6b7280;
 }
-.pending-item .actions {
-  justify-self: end;
-  display: flex;
-  gap: 8px;
-}
+
 .pending-item .role-center {
   position: absolute;
   left: 50%;
@@ -1069,6 +1065,75 @@ function editUser(u) {
   pointer-events: none;
   z-index: 1;
 }
+
+
+.pending-item .actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+/* Pulsanti approva / rifiuta SOLO nella lista pending */
+.pending-item .actions .ok,
+.pending-item .actions .ko {
+  width: 27px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0; /* niente testo vero */
+
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.16);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.12s ease;
+}
+
+/* Check verde */
+.pending-item .actions .ok {
+  background: #22c55e;
+}
+.pending-item .actions .ok::before {
+  content: '✓';
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+}
+
+/* X rossa */
+.pending-item .actions .ko {
+  background: #ef4444;
+}
+.pending-item .actions .ko::before {
+  content: '✕';
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+}
+
+/* Hover / active leggeri */
+.pending-item .actions .ok:hover,
+.pending-item .actions .ko:hover {
+  filter: brightness(1.02);
+}
+
+.pending-item .actions .ok:active,
+.pending-item .actions .ko:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+
+
+
+
+
 .badge-role {
   display: inline-block;
   padding: 4px 10px;
@@ -1243,10 +1308,12 @@ function editUser(u) {
   color: #dc2626;
   margin-top: 4px;
 }
-.ok {
+
+.modal p.ok {
   color: #059669;
   margin-top: 4px;
 }
+
 .btns {
   display: flex;
   justify-content: flex-end;
