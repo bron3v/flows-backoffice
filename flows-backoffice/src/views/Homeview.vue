@@ -8,7 +8,7 @@
       <!-- Topbar -->
       <AppTopbar
         class="topbar-card full-bleed"
-        title="Utenti"
+        title="Dashboard"
         v-model="q"
         :session-user="sessionUser"
         :avatar-initial="avatarInitial"
