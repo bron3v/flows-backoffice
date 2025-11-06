@@ -150,9 +150,18 @@
       :disabled="loading"
       aria-label="Create new user"
     >
-      <span v-if="!loading">New user</span>
-      <span v-else>Invio…</span>
+      <!-- icona centrata -->
+      <span
+        v-if="!loading"
+        class="fab-icon"
+        :style="iconStyleFab(addUserIcon)"
+      ></span>
+
+      <!-- testo solo in stato loading -->
+      <span v-else class="fab-label">Invio…</span>
     </button>
+
+
 
     <!-- Modal: nuova richiesta utente -->
     <teleport to="body">
@@ -233,6 +242,7 @@ import AppTopbar from '@/components/AppTopBar.vue'
 import { api } from '@/utils/api'
 import usersIcon from '@/assets/users.png'
 import onlineUsersIcon from '@/assets/onlineUsers.png'
+import addUserIcon from '@/assets/addUser.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -259,6 +269,15 @@ const ALLOWED_ROLES = new Set(['user', 'user_manager', 'logs_manager', 'admin'])
 
 const iconStyle = (src) => ({
   backgroundImage: `url(${src})`
+})
+
+
+const iconStyleFab = (src) => ({
+  backgroundImage: `url(${src})`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'center',
+  backgroundSize: '80% 80%',      // dimensione icona
+  filter: 'brightness(0) invert(1)' // rende l'icona bianca
 })
 
 function isSelf(u) {
@@ -1201,51 +1220,6 @@ function editUser(u) {
   }
 }
 
-/* FAB + Modal (come seconda pagina originale) */
-.fab-new-user {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 1000;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  background: #10b981;
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-  transition: transform 0.12s ease, box-shadow 0.12s ease,
-    opacity 0.12s ease, background 0.12s ease;
-  font-size: 0;
-}
-.fab-new-user::after {
-  content: '+';
-  font-size: 28px;
-  line-height: 1;
-}
-.fab-new-user:hover {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-  background: #0ea371;
-}
-.fab-new-user:active {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-  background: #0c8c6d;
-}
-.fab-new-user:focus-visible {
-  outline: 3px solid rgba(16, 185, 129, 0.35);
-  outline-offset: 2px;
-}
-.fab-new-user:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-}
 
 /* Modal */
 .overlay {
@@ -1344,4 +1318,36 @@ function editUser(u) {
   opacity: 0.7;
   cursor: not-allowed;
 }
+
+.fab-new-user {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  width: 56px;
+  height: 56px;
+  border: none;
+  border-radius: 50%;
+  background: #14db99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  padding: 0;
+}
+
+/* span che contiene il png come background */
+.fab-icon {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
+/* testo solo quando loading */
+.fab-label {
+  font-size: 12px;
+  color: #ffffff;
+}
+
 </style>
