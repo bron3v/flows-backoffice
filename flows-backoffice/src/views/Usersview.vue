@@ -1051,6 +1051,7 @@ function editUser(u) {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  gap: 0; 
 }
 .pending-item {
   position: relative;
@@ -1061,6 +1062,14 @@ function editUser(u) {
   padding: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
+  border-radius: 0;       /* niente card separate */
+  border: 0;              /* reset */
+  border-top: 1px solid #e5e7eb;   /* separatore sottile tra righe */
+}
+
+/* niente bordo sopra la prima riga */
+.pending-item:first-child {
+  border-top: none;
 }
 .pending-item img {
   width: 36px;
