@@ -20,7 +20,7 @@
       <!-- Content grid -->
       <section class="content">
         <section class="dashboard">
-          <!-- KPI: solo 2 card (niente Flows system) -->
+
           <div class="kpi-row">
             <div class="kpi">
               <div class="kpi-icon users" :style="iconStyle(usersIcon)"></div>
@@ -37,8 +37,16 @@
                 <div class="kpi-label">Utenti online</div>
               </div>
             </div>
-          </div>
 
+            <!--Utenti da approvare -->
+            <div class="kpi">
+              <div class="kpi-icon pending" :style="iconStyle(pendingUsersIcon)"></div>
+              <div>
+                <div class="kpi-val">{{ pending.length }}</div>
+                <div class="kpi-label">Utenti da approvare</div>
+              </div>
+            </div>
+          </div>
           <!-- Utenti da approvare -->
           <div class="card approvals-card">
             <div class="card-head">
@@ -243,6 +251,7 @@ import { api } from '@/utils/api'
 import usersIcon from '@/assets/users.png'
 import onlineUsersIcon from '@/assets/onlineUsers.png'
 import addUserIcon from '@/assets/addUser.png'
+import pendingUsersIcon from '@/assets/pendingUser.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -911,8 +920,13 @@ function editUser(u) {
 /* KPI row (come prima pagina, ma solo 2 card) */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
+}
+
+.kpi-icon.pending {
+  background-color: #fff7ed;      
+  background-image: none;         
 }
 
 .kpi {
