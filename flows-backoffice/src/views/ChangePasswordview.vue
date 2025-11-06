@@ -154,7 +154,7 @@ async function submitChange () {
     }
 
     ok.value = true
-    // opzionale: redirect dopo breve pausa
+    //Redirect dopo breve pausa
     setTimeout(() => {
       const redirect = route.query.redirect || '/'
       router.push(String(redirect))
@@ -166,27 +166,10 @@ async function submitChange () {
   }
 }
 
-async function goBack () {
-  // Chiudi la sessione server-side (best effort)
-  try { await api.logout() } catch {}
-
-  // Pulisci lo stato locale usato dal guard
-  try {
-    sessionStorage.setItem('flows_logged', '0')
-    sessionStorage.setItem('flows_logged_ts', String(Date.now()))
-    sessionStorage.removeItem('flows_role')
-  } catch {}
-
-  // Vai esplicitamente alla pagina di login
-  router.replace({
-    path: '/login',
-    query: { redirect: String(route.query.redirect || '/') }
-  })
-}
-
 </script>
 
 <style scoped>
+
 /* ---------- Layout ---------- */
 .auth-shell{
   min-height: 100vh;
@@ -233,9 +216,9 @@ async function goBack () {
   padding: 18px;
   display: grid;
   gap: 14px;
-  overflow: hidden;                /* evita focus ring e sbordi */
+  overflow: hidden;               
 }
-.login-card *{ box-sizing: border-box; }  /* 👉 impedisce lo “sbordo” */
+.login-card *{ box-sizing: border-box; } 
 
 .title{ font-size: 22px; font-weight: 800; margin: 0; color:#0f172a; }
 .muted{ color:#6b7280; }
@@ -244,7 +227,7 @@ async function goBack () {
 /* ---------- Campi ---------- */
 .input, button.btn{ width:100%; display:block; }
 .input{
-  border: 1px solid #cbd5e1;       /* neutro */
+  border: 1px solid #cbd5e1;       
   border-radius: 10px;
   padding: 10px 12px;
   background: #ffffff;
@@ -255,7 +238,7 @@ async function goBack () {
 }
 .input::placeholder{ color:#94a3b8; }
 .input:focus{
-  border-color:#1cb5a9;            /* teal brand */
+  border-color:#1cb5a9;            
   box-shadow: 0 0 0 3px rgba(28,181,169,.18);
 }
 
@@ -271,7 +254,7 @@ async function goBack () {
   box-shadow: 0 0 0 3px rgba(220,38,38,.15);
 }
 
-/* Campo con azione (eye button) */
+/* Eye button */
 .field-with-action{ position:relative; display:grid; }
 .eye-btn{
   position: absolute; right:8px; top:50%;
@@ -285,7 +268,7 @@ async function goBack () {
   list-style:none; padding:0;
   display:grid; gap:4px;
   font-size:12px; color:#6b7280;
-  margin: 0 0 12px 0;              /* 🔧 stacco in basso dalla conferma */
+  margin: 0 0 12px 0;             
 }
 .rules li{ display:flex; align-items:center; gap:6px; }
 .rules li::before{ content:'•'; transform:translateY(-1px); opacity:.6; margin-right:2px; }
@@ -295,7 +278,7 @@ async function goBack () {
 /* Azioni */
 .actions{
   display:flex;
-  justify-content:center;          /* 🔧 centra il pulsante */
+  justify-content:center;         
   margin-top:8px;
 }
 .btn{
@@ -308,16 +291,16 @@ async function goBack () {
 }
 .btn.primary{
   background:#1cb5a9; color:#fff; border-color:#1cb5a9;
-  width:100%; max-width:280px;     /* 🔧 larghezza contenuta e centrata */
+  width:100%; max-width:280px;     
 }
 .btn.primary:hover{ filter:brightness(.98); }
 .btn:disabled{
   opacity: .6;
-  cursor: default;   /* freccia, non mano */
+  cursor: default;   
 }
 
 
-/* Feedback / link di ritorno */
+/* Feedback / link */
 .feedback{ margin:6px 2px 0; font-size:14px; }
 .feedback.success{ color:#166534; }
 .feedback.error{ color:#b91c1c; }

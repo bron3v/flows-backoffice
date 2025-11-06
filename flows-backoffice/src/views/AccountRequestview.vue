@@ -54,7 +54,7 @@
           </p>
         </form>
 
-        <!-- Link "Torna al login" sotto tutto -->
+        <!-- Link "Torna al login" -->
         <p style="margin-top:12px;font-size:13px; color:black;">
           Torna al <RouterLink to="/login" style="font-weight:700; text-decoration: underline; text-underline-offset: 2px;">Login</RouterLink>
         </p>
@@ -190,7 +190,7 @@ async function submitRequest () {
     // 401 legacy "not_logged_in" trattato come modalità offline/compat
     const notLogged = status === 401 && /not_logged_in/i.test(codeStr)
 
-    // In caso di endpoint mancante (404) o 401 not_logged_in → crea localmente e conferma
+    // In caso di endpoint mancante (404) o 401 not_logged_in, crea localmente e conferma
     if (status === 404 || notLogged) {
       const created = {
         id: Date.now(),
@@ -267,10 +267,9 @@ async function submitRequest () {
   box-shadow: 0 10px 24px rgba(0,0,0,.16);
   padding: 14px 16px 18px;
   text-align: center;
-  overflow: hidden;                /* evita che il focus ring “sbordi” */
+  overflow: hidden;               
 }
 
-/* impedisce lo sbordo degli elementi interni */
 .login-card * { box-sizing: border-box; }
 
 .title {
@@ -288,7 +287,7 @@ select.input,
 button.btn {
   width: 100%;
   display: block;
-  box-sizing: border-box;          /* fondamentale per non far “uscire” i bordi */
+  box-sizing: border-box;         
 }
 
 .input {
@@ -304,7 +303,7 @@ button.btn {
   appearance: none;
 }
 
-select.input { padding-right: 34px; }  /* spazio per la freccia del select */
+select.input { padding-right: 34px; }  
 
 .input::placeholder { color: #8fa3a9; }
 .input:focus { border-color: #15978f; box-shadow: 0 0 0 3px rgba(28,181,169,.18); }

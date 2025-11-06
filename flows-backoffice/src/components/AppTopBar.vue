@@ -20,8 +20,13 @@
         }"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
-                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
+          <path
+            d="M21 21l-3.8-3.8M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"
+            stroke="currentColor"
+            stroke-width="2"
+            fill="none"
+            stroke-linecap="round"
+          />
         </svg>
         <input
           class="topbar-search"
@@ -47,23 +52,31 @@
 <script setup lang="ts">
 import AvatarCard from '@/components/AvatarCard.vue'
 
-interface SessionUser { id?: string|number; username?: string; email?: string; [k:string]: unknown }
+interface SessionUser {
+  id?: string | number
+  username?: string
+  email?: string
+  [k: string]: unknown
+}
 
-const props = withDefaults(defineProps<{
-  title?: string
-  modelValue?: string
-  searchPlaceholder?: string
-  sessionUser?: SessionUser | null
-  avatarInitial?: string
-  fullBleed?: boolean        
-}>(), {
-  title: 'Dashboard',
-  modelValue: '',
-  searchPlaceholder: 'Search…',
-  sessionUser: null,
-  avatarInitial: 'A',
-  fullBleed: false
-})
+withDefaults(
+  defineProps<{
+    title?: string
+    modelValue?: string
+    searchPlaceholder?: string
+    sessionUser?: SessionUser | null
+    avatarInitial?: string
+    fullBleed?: boolean
+  }>(),
+  {
+    title: 'Dashboard',
+    modelValue: '',
+    searchPlaceholder: 'Search…',
+    sessionUser: null,
+    avatarInitial: 'A',
+    fullBleed: false
+  }
+)
 </script>
 
 <style scoped>
@@ -75,22 +88,28 @@ const props = withDefaults(defineProps<{
   background: #ffffff;
   color: #0b0b0c;
   border-bottom: 1px solid #e6e8ef;
-  box-shadow: 0 1px 0 rgba(17,17,17,0.04);
+  box-shadow: 0 1px 0 rgba(17, 17, 17, 0.04);
 }
 
 .app-topbar.fullbleed {
-  margin: -24px -24px 16px;   /* sborda a sx/dx e su */
-  padding: 14px 24px;         /* riallinea il contenuto */
-  border-radius: 0;           /* niente angoli */
+  margin: -24px -24px 16px;
+  padding: 14px 24px;
+  border-radius: 0;
 }
 
-.app-topbar-title { font-size: 20px; font-weight: 700; margin: 0; }
+.app-topbar-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
 
-.app-top-actions { display: flex; gap: 12px; align-items: center; }
+.app-top-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 
-/* Search: stesse misure, angoli leggermente stondati */
-/* == Search aggiornata con le proprietà richieste == */
-.app-search{
+.app-search {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -101,20 +120,25 @@ const props = withDefaults(defineProps<{
   box-shadow: none;
 }
 
-.app-search svg{
+.app-search svg {
   width: 18px;
   height: 18px;
   color: #6b7280;
 }
 
-.app-search input{
+.app-search input {
   border: none;
   outline: none;
   background: transparent;
   min-width: 210px;
-  color: inherit; /* usa il colore del contenitore */
+  color: inherit;
 }
 
-.topbar-search { padding: 0; }
-.avatarButton { padding: 0; }
+.topbar-search {
+  padding: 0;
+}
+
+.avatarButton {
+  padding: 0;
+}
 </style>

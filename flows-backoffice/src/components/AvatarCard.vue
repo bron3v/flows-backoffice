@@ -68,7 +68,7 @@ const loggingOut = ref(false)
 const triggerRef = ref(null)
 const cardRef = ref(null)
 
-/* ---- Stato interno derivato da props / storage / /me ---- */
+/* Stato interno derivato da props / storage / /me */
 const nameRef   = ref(props.userName || '')
 const emailRef  = ref(props.userEmail || '')
 const initialRef= ref(props.avatarInitial || '')
@@ -79,9 +79,9 @@ const userSecondLine  = computed(() => emailRef.value || nameRef.value || '—')
 const initialToShow = computed(() => {
   const propInit = String(initialRef.value || '').trim().toUpperCase()
   const fromName = guessInitial(nameRef.value || emailRef.value || '')
-  // se il prop è una lettera reale diversa da 'A', onora il prop
+  // se il prop è una lettera  diversa da 'A', usa il prop
   if (propInit && propInit !== 'A') return propInit
-  // altrimenti usa quella calcolata dal nome/email
+  // altrimenti usa quella calcolata dal nome
   return fromName || 'A'
 })
 
@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #15e6a1 ; /* verde/teal come in figura */
+  background: #15e6a1 ; 
   color: #082f1f;
   display: grid;
   place-items: center;
@@ -222,10 +222,10 @@ onBeforeUnmount(() => {
   z-index: 50;
 }
 
-/* Card stile modale come nello screenshot */
+
 .card{
   position: fixed;
-  top: 64px;       /* cadenzato per apparire vicino alla topbar */
+  top: 64px;       
   right: 24px;
   width: 380px;
   max-width: calc(100vw - 32px);
@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
 .u-name{ color:#0b1730; font-weight:700; }
 .u-mail{ color:#64748b; font-size:.92rem; }
 
-/* Footer con i due bottoni come in figura */
+/* Footer con i due bottoni */
 .card-footer{
   display:flex; justify-content:flex-end; gap:10px;
   padding: 14px 16px 16px;
@@ -264,13 +264,13 @@ onBeforeUnmount(() => {
 }
 .btn:active{ transform: translateY(1px); }
 
-/* Annulla grigio */
+
 .btn-ghost{
   background: #e5e7eb; color:#0f172a;
 }
 .btn-ghost:hover{ background:#e2e8f0; }
 
-/* Logout verde/teal come "Invia richiesta" */
+
 .btn-primary{
   background:#15e6a1;
   color:#052e22;

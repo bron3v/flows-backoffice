@@ -40,7 +40,7 @@ import { RouterLink } from 'vue-router'
 </script>
 
 <style scoped>
-/* =============== SIDEBAR =============== */
+
 .sidebar {
   width: 240px;
   min-height: 100vh;

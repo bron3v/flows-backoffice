@@ -399,7 +399,7 @@ function onSearch(term) {
   q.value = term
 }
 function openProfile() {
-  // router.push('/profile') se/quando servirà
+  // router.push('/profile') 
 }
 
 /* ---------------- Bootstrap & lifecycle ---------------- */
@@ -468,7 +468,7 @@ onBeforeUnmount(() => {
   overflow-x: clip;
 }
 
-/* Topbar (coerente con AppTopbar) */
+/* Topbar */
 .app-topbar {
   box-sizing: border-box;
   height: 64px;
@@ -539,7 +539,6 @@ onBeforeUnmount(() => {
   color: inherit;
 }
 
-/* Content */
 .content {
   display: grid;
   grid-template-columns: 1fr;

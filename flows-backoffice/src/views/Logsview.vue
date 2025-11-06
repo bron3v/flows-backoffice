@@ -3,7 +3,6 @@
     <!-- Sidebar -->
     <AppSidebar />
 
-    <!-- Main -->
     <main class="main">
       <!-- Topbar -->
       <AppTopBar
@@ -194,7 +193,7 @@ import { api } from '@/utils/api'
 import warningIcon from '@/assets/warning.png'
 import reqsIcon from '@/assets/reqs.png'
 
-/* Stato base */
+
 const router = useRouter()
 const route = useRoute()
 const sessionUser = ref(null)
@@ -213,19 +212,17 @@ const toIso = ref(nowIso())
 const autoRefresh = ref(true)
 const refreshSec = 15
 
-/* Dati */
+
 const loading = ref(false)
 const err = ref('')
 const logs = ref([])
 
-/* Paginazione */
 const page = ref(1)
 const pageSize = ref(20)
 
-/* Espansione righe */
 const expanded = ref(new Set())
 
-/* Range & label per KPI */
+
 const range = computed(() => {
   const from = toEpoch(fromIso.value)
   const to = toEpoch(toIso.value)
@@ -261,7 +258,7 @@ async function ensureSession () {
   }
 }
 
-/* Caricamento logs (con fallback) */
+/* Caricamento logs  */
 async function refreshNow () {
   loading.value = true
   err.value = ''
@@ -284,7 +281,7 @@ async function refreshNow () {
     console.warn('[Logs] using local sample. Cause:', e?.message || e)
     logs.value = normalizeLogs(sampleLogs())
     updateKpi()
-    err.value = '' // opzionale: messaggio user-friendly
+    err.value = '' 
   } finally {
     loading.value = false
   }
@@ -472,7 +469,7 @@ function levelClass(l){
 :root{ --gutter:24px; }
 .main{ padding:0 var(--gutter) var(--gutter) 0; overflow-x:clip; }
 
-/* Topbar full-bleed (stile coerente) */
+/* Topbar full-bleed  */
 .topbar-card.full-bleed{ margin:0 calc(-1 * var(--gutter)) 16px 0; border-radius:0; }
 
 /* Grid contenuti */
@@ -494,7 +491,6 @@ function levelClass(l){
 .kpi-icon.errors{ background:#fef2f2; }
 
 
-/* rende il box pronto ad accogliere il contenuto */
 .kpi-icon{
   position: relative;
   display: grid;
@@ -503,16 +499,15 @@ function levelClass(l){
 
 /* REQ/MIN: box + icona con spessore regolabile */
 .kpi-icon.reqs{
-  --reqs-size: 20px;       /* dimensione icona */
-  --reqs-weight: 1.08;     /* >1 = più spessa (1.04–1.15 consigliato) */
-  --reqs-color: #06b6d4;   /* colore icona (cyan/teal) */
-
-  background:#ecfeff;      /* riquadro chiaro */
+  --reqs-size: 20px;       
+  --reqs-weight: 1.08;    
+  --reqs-color: #06b6d4;   
+  background:#ecfeff;     
   border-radius:12px;
   position:relative;
 }
 
-/* layer “stroke” (sotto) per dare spessore */
+/* layer “stroke” per dare spessore */
 .kpi-icon.reqs::before{
   content:'';
   position:absolute; top:50%; left:50%;
@@ -540,20 +535,17 @@ function levelClass(l){
   z-index:1;
 }
 
-
-
-/* X rossa nel riquadro Errori */
 .kpi-icon.errors::before{
-  content: 'X';           /* oppure '×' se preferisci */
-  font-size: 20px;        /* adatta se vuoi più grande/piccola */
+  content: 'X';           
+  font-size: 20px;       
   font-weight: 800;
   line-height: 1;
-  color: #ef4444;         /* rosso */
+  color: #ef4444;        
 }
 
 .kpi-icon.warnings{
-  --warn-size: 20px;   /* dimensione icona */
-  --warn-weight: 1.08; /* < 1.20 -> meno grosso (prova 1.04–1.10) */
+  --warn-size: 20px;   
+  --warn-weight: 1.08; 
 
   background:#fff0d2;
   border-radius:12px;
@@ -585,9 +577,6 @@ function levelClass(l){
   pointer-events:none;
   z-index:1;
 }
-
-
-
 
 
 /* Filtri */
@@ -632,7 +621,7 @@ function levelClass(l){
 /* Pager */
 .pager{ display:flex; align-items:center; justify-content:center; gap:12px; padding:12px; }
 
-/* Responsive */
+
 @media (max-width: 1024px){
   .filters{ grid-template-columns: repeat(2, minmax(0,1fr)); }
   .field.grow{ grid-column: span 2; }
@@ -661,7 +650,7 @@ function levelClass(l){
   color:#475569;
 }
 
-/* Checkbox custom: box verde + spunta bianca */
+
 .checkbox,
 .switch input[type="checkbox"]{
   appearance: none;
@@ -685,7 +674,7 @@ function levelClass(l){
   border-color: #22c55e;
 }
 
-/* Spunta (tick) disegnata in bianco */
+
 .checkbox::after,
 .switch input[type="checkbox"]::after{
   content: "";

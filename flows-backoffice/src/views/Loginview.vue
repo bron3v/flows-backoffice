@@ -40,13 +40,10 @@
           <p v-if="error" style="margin-top:10px;color:#b00020">{{ error }}</p>
         </form>
 
-        <!-- CTA in basso -->
         <p class="signup-cta">
           Non hai un account?
           <RouterLink class="cta-link" to="/account-request">Richiedilo.</RouterLink>
-          <!-- In alternativa, se usi la route nominata:
-          <RouterLink class="cta-link" :to="{ name: 'account-request' }">Richiedilo.</RouterLink>
-          -->
+
         </p>
       </div>
     </section>
@@ -68,7 +65,7 @@ const router = useRouter()
 const route = useRoute()
 
 function sanitizeRedirect(q) {
-  // Permetti solo redirect interni all’app
+  //Solo redirect interni all’app
   if (typeof q !== 'string' || !q) return '/'
   if (q.startsWith('http://') || q.startsWith('https://')) return '/'
   return q
@@ -89,7 +86,6 @@ async function doLogin() {
 
   loading.value = true
   try {
-    // Chiamata login: il backend ora restituisce user.first_login
     const res = await api.login(user, pass) // POST /auth/login
     if (!(res?.ok) || !res?.user) {
       error.value = 'Credenziali errate'
@@ -98,11 +94,11 @@ async function doLogin() {
 
     const role = String(res.user.role || '').toLowerCase()
 
-    // Semantica: account appena creato -> first_login === false -> obbligo cambio password
+    //Obbligo cambio password
     const firstLogin =
       res.user.first_login === true ? true :
       res.user.first_login === false ? false :
-      false // fallback sicuro: se assente, forza cambio password
+      false // Fallback sicuro
 
     if (firstLogin === false) {
       markLoggedIn()
@@ -204,7 +200,7 @@ async function doLogin() {
 .btn:hover { filter: brightness(0.96); }
 .btn:active { transform: translateY(1px); }
 
-/* CTA in basso sotto al form */
+
 .signup-cta{
   margin-top: 12px;
   font-size: 13px;
