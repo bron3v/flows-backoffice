@@ -5,7 +5,7 @@
 
     <!-- Main area -->
     <main class="main">
-      <!-- Topbar identica alla prima pagina -->
+      <!-- Topbar  -->
       <AppTopbar
         class="topbar-card full-bleed"
         title="Utenti"
@@ -21,7 +21,10 @@
       <section class="content">
         <section class="dashboard">
 
+          <!-- Card kpi -->
           <div class="kpi-row">
+
+            <!-- Card utenti totali -->
             <div class="kpi">
               <div class="kpi-icon users" :style="iconStyle(usersIcon)"></div>
               <div>
@@ -29,7 +32,8 @@
                 <div class="kpi-label">Utenti totali</div>
               </div>
             </div>
-
+            
+            <!-- Card utenti online -->
             <div class="kpi">
               <div class="kpi-icon orders" :style="iconStyle(onlineUsersIcon)"></div>
               <div>
@@ -38,7 +42,7 @@
               </div>
             </div>
 
-            <!--Utenti da approvare -->
+            <!-- Card utenti da approvare -->
             <div class="kpi">
               <div class="kpi-icon pending" :style="iconStyle(pendingUsersIcon)"></div>
               <div>
@@ -47,7 +51,9 @@
               </div>
             </div>
           </div>
-          <!-- Utenti da approvare -->
+
+
+          <!-- Sezione utenti da approvare -->
           <div class="card approvals-card">
             <div class="card-head">
               <h3>Utenti da approvare</h3>
@@ -77,7 +83,7 @@
             <div v-else class="empty">Nessuna richiesta in sospeso.</div>
           </div>
 
-          <!-- Tabella utenti (Team) identica alla prima pagina -->
+          <!-- Tabella utenti  -->
           <div class="card">
             <div class="card-head">
               <h3>Team</h3>
@@ -113,7 +119,7 @@
                     <span class="badge danger" v-else>Offline</span>
                   </td>
 
-                  <td class="role">{{ prettyRole(m.role) }}</td>
+                  <td class="role">{{ m.roleLabel || prettyRole(m.role)}}</td>
 
                   <td>
                     <span v-if="m.active" class="chip online">Online ora</span>
@@ -276,17 +282,18 @@ const ok = ref(false)
 
 const ALLOWED_ROLES = new Set(['user', 'user_manager', 'logs_manager', 'admin'])
 
+//Funzione per i png
 const iconStyle = (src) => ({
   backgroundImage: `url(${src})`
 })
 
-
+//Funzione specifica per il png del pulsante aggiunta utenti
 const iconStyleFab = (src) => ({
   backgroundImage: `url(${src})`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'center',
-  backgroundSize: '80% 80%',      // dimensione icona
-  filter: 'brightness(0) invert(1)' // rende l'icona bianca
+  backgroundSize: '80% 80%',      
+  filter: 'brightness(0) invert(1)' 
 })
 
 function isSelf(u) {
@@ -803,14 +810,14 @@ function samplePending() {
   ]
 }
 
-/* placeholder per editUser se serve altrove */
+// placeholder per editUser
 function editUser(u) {
   console.log('edit user', u)
 }
 </script>
 
 <style scoped>
-/* Layout & topbar identici alla prima pagina */
+/* Layout & topbar */
 .layout {
   display: flex;
   background: #eef2f7;
@@ -917,7 +924,7 @@ function editUser(u) {
   gap: 18px;
 }
 
-/* KPI row (come prima pagina, ma solo 2 card) */
+/* KPI row */
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -965,7 +972,7 @@ function editUser(u) {
   color: #64748b;
 }
 
-/* Cards & table identici */
+/* Cards & table */
 .card {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -1057,7 +1064,7 @@ function editUser(u) {
   color: #374151;
 }
 
-/* Pending list come prima pagina */
+
 .pending-list {
   list-style: none;
   padding: 0;
@@ -1076,8 +1083,8 @@ function editUser(u) {
   padding: 8px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  border-radius: 0;       /* niente card separate */
-  border: 0;              /* reset */
+  border-radius: 0;       
+  border: 0;              
   border-top: 1px solid #e5e7eb;   /* separatore sottile tra righe */
 }
 
@@ -1116,7 +1123,7 @@ function editUser(u) {
   justify-self: end;
 }
 
-/* Pulsanti approva / rifiuta SOLO nella lista pending */
+/* Pulsanti approva / rifiuta */
 .pending-item .actions .ok,
 .pending-item .actions .ko {
   width: 27px;
@@ -1148,7 +1155,7 @@ function editUser(u) {
   color: #ffffff;
 }
 
-/* X rossa */
+
 .pending-item .actions .ko {
   background: #ef4444;
 }
@@ -1160,7 +1167,7 @@ function editUser(u) {
   color: #ffffff;
 }
 
-/* Hover / active leggeri */
+
 .pending-item .actions .ok:hover,
 .pending-item .actions .ko:hover {
   filter: brightness(1.02);
@@ -1171,9 +1178,6 @@ function editUser(u) {
   transform: translateY(0);
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
 }
-
-
-
 
 
 .badge-role {
@@ -1228,7 +1232,6 @@ function editUser(u) {
   padding: 8px;
 }
 
-/* Responsive */
 @media (max-width: 1100px) {
   .content {
     grid-template-columns: 1fr;
@@ -1359,7 +1362,6 @@ function editUser(u) {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
   padding: 0;
 }
-
 /* span che contiene il png come background */
 .fab-icon {
   width: 34px;
@@ -1367,10 +1369,12 @@ function editUser(u) {
   display: block;
 }
 
-/* testo solo quando loading */
 .fab-label {
   font-size: 12px;
   color: #ffffff;
 }
 
+td.role {
+  color: #64748b;
+}
 </style>
