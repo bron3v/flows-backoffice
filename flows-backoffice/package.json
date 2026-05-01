@@ -13,7 +13,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "connect-pg-simple": "^10.0.0",
     "express": "^5.1.0",
+    "express-session": "^1.19.0",
     "nodemailer": "^7.0.9",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"
@@ -23,8 +25,14 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
     "dotenv": "^17.2.3",
-    "nodemon": "^3.1.10",
+    "nodemon": "^3.1.14",
     "vite": "^7.0.6",
     "vite-plugin-vue-devtools": "^8.0.0"
-  }
+  },
+  "description": "This template should help get you started developing with Vue 3 in Vite.",
+  "main": "vite.config.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
 }
