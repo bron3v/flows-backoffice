@@ -19,7 +19,7 @@ const pool = process.env.DATABASE_URL
       idleTimeoutMillis: 30000
     })
   : new Pool({
-      host: process.env.PGHOST || '172.19.16.1',
+      host: process.env.PGHOST || 'localhost',
       port: Number(process.env.PGPORT || 5432),
       user: process.env.PGUSER || 'postgres',
       password: process.env.PGPASSWORD || 'postgres',
@@ -187,50 +187,59 @@ app.use((req, _res, next) => {
 // ---------- Auth ----------
 app.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body || {};
+    const { username, password } = req.body || {}
+
     if (!username || !password) {
-      return res.status(400).json({ ok: false, message: 'missing_fields' });
+      return res.status(400).json({ ok: false, message: 'missing_fields' })
     }
 
-    const user = await findUserByUsername(username);
-    const ok = user && await checkPassword(user, password);
-    if (!ok) {
-      // mantieni compatibilità col FE: 200 + invalid_credentials
-      return res.status(200).json({ ok: false, message: 'invalid_credentials' });
+    const user = await findUserByUsername(username)
+    const validPassword = user && await checkPassword(user, password)
+
+    if (!validPassword) {
+      return res.status(200).json({ ok: false, message: 'invalid_credentials' })
     }
 
-    // --- sessione utente ---
-    req.session.loggedIn = true;
-    req.session.userId   = user.id;
-    req.session.user     = { id: user.id, username: user.username, role: user.role };
+    const now = Date.now()
 
-    const now = Date.now();
-    req.session.lastSeenTs = now;
+    req.session.loggedIn = true
+    req.session.userId = user.id
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      role: user.role
+    }
+    req.session.lastSeenTs = now
 
-    // Salvataggio sessione. Non blocca la risposta se fallisce il save asincrono
-    req.session.save(() => {});
-
-    pool.query(
+    await pool.query(
       `UPDATE public.users
-         SET last_seen_ts = GREATEST(COALESCE(last_seen_ts,0), $1)
+         SET last_seen_ts = GREATEST(COALESCE(last_seen_ts, 0), $1)
        WHERE id = $2`,
       [now, user.id]
-    ).catch(() => {});
-    return res.json({
-      ok: true,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        first_login: user.first_login === true   
+    ).catch(() => {})
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('[/auth/login] session save error:', err)
+        return res.status(500).json({ ok: false, message: 'session_save_error' })
       }
+
+      return res.json({
+        ok: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          first_login: user.first_login === true
+        }
+      })
     })
 
   } catch (err) {
-    console.error('[/auth/login] error:', err);
-    return res.status(500).json({ ok: false, message: 'server_error' });
+    console.error('[/auth/login] error:', err)
+    return res.status(500).json({ ok: false, message: 'server_error' })
   }
-});
+})
 
 
 
