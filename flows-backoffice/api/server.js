@@ -60,15 +60,36 @@ async function findUserByUsername (username) {
   return rows[0] || null
 }
 
-async function createUser (username, plainPassword) {
+async function createUser(username, plainPassword) {
+  const normalizedUsername = String(username || '').trim().toLowerCase()
+
+  if (!normalizedUsername || !plainPassword) {
+    return null
+  }
+
+  const existing = await pool.query(
+    `
+    SELECT id
+    FROM public.users
+    WHERE lower(username) = lower($1)
+    LIMIT 1
+    `,
+    [normalizedUsername]
+  )
+
+  if (existing.rows.length > 0) {
+    return null
+  }
+
   const hash = await bcrypt.hash(plainPassword, 10)
+
   const sql = `
     INSERT INTO public.users (username, password_hash, first_login)
     VALUES ($1, $2, false)
-    ON CONFLICT (username) DO NOTHING
     RETURNING id, username, role, first_login
   `
-  const { rows } = await pool.query(sql, [username, hash])
+
+  const { rows } = await pool.query(sql, [normalizedUsername, hash])
   return rows[0] || null
 }
 
