@@ -11,9 +11,9 @@
         <form @submit.prevent="doLogin">
           <div class="form-group">
             <input
-              v-model.trim="email"
-              type="email"
-              placeholder="E-mail"
+              v-model.trim="identifier"
+              type="text"
+              placeholder="Username o e-mail"
               required
               class="input"
               autocomplete="username"
@@ -37,7 +37,9 @@
             </button>
           </div>
 
-          <p v-if="error" style="margin-top:10px;color:#b00020">{{ error }}</p>
+          <p v-if="error" style="margin-top:10px;color:#b00020">
+            {{ error }}
+          </p>
         </form>
       </div>
     </section>
@@ -52,7 +54,7 @@ import { api } from '@/utils/api'
 const AUTH_CACHE_KEY = 'flows_logged'
 const AUTH_CACHE_TS_KEY = 'flows_logged_ts'
 
-const email = ref('')
+const identifier = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -60,40 +62,45 @@ const error = ref('')
 const router = useRouter()
 const route = useRoute()
 
-function isEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s || '') }
+function isValidIdentifier(value) {
+  return String(value || '').trim().length >= 3
+}
 
 async function doLogin () {
   error.value = ''
-  // validazione minima
-  if (!isEmail(email.value) || !password.value) {
-    error.value = 'Inserisci email e password valide'
+
+  if (!isValidIdentifier(identifier.value) || !password.value) {
+    error.value = 'Inserisci username/e-mail e password validi'
     return
   }
 
   loading.value = true
+
   try {
-    const { ok, status, data } = await api.login(email.value, password.value)
+    const { ok, status, data } = await api.login(identifier.value, password.value)
 
     if (!ok || !data?.ok || !data?.user) {
-      // mapping errori comuni
       if (status === 401 || data?.message === 'invalid_credentials') {
-        error.value = 'Email o password errati'
+        error.value = 'Username/e-mail o password errati'
       } else if (status === 400) {
         error.value = 'Compila tutti i campi'
       } else {
         error.value = 'Errore del server'
       }
-      // marca login fallito per il guard
+
       sessionStorage.setItem(AUTH_CACHE_KEY, '0')
       sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
       return
     }
 
-    // successo: cache e redirect
     sessionStorage.setItem(AUTH_CACHE_KEY, '1')
     sessionStorage.setItem(AUTH_CACHE_TS_KEY, String(Date.now()))
 
-    const back = (typeof route.query.redirect === 'string' && route.query.redirect) ? route.query.redirect : '/'
+    const back =
+      typeof route.query.redirect === 'string' && route.query.redirect
+        ? route.query.redirect
+        : '/'
+
     await router.push(back)
   } catch (e) {
     error.value = 'Errore di connessione'
