@@ -2,30 +2,44 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const API_TARGET = 'http://localhost:3002'
 
 export default defineConfig({
   plugins: [vue()],
+
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
+
   server: {
     proxy: {
-      '/admin/api': { target: 'http://127.0.0.1:3000', changeOrigin: true, secure: false },
-      '/auth':      { target: 'http://127.0.0.1:3000', changeOrigin: true, secure: false },
-      '/me':        { target: 'http://127.0.0.1:3000', changeOrigin: true, secure: false },
-      '/api':       { target: 'http://127.0.0.1:3000', changeOrigin: true, secure: false }
+      '/auth': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/me': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/admin/api': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/logout': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+      },
     },
-    // Aggancia middleware custom al dev server Vite.
-    configureServer(server) {
-      // Aggiunta middleware che logga in console solo le richieste
-      server.middlewares.use((req, _res, next) => {
-        if (/^(\/auth|\/me|\/admin)/.test(req.url)) {
-          console.log('[vite→proxy]', req.method, req.url)
-        }
-        next()
-      })
-    }
-  }
+  },
 })
