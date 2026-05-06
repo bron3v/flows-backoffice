@@ -11,22 +11,12 @@ const nodemailer = require('nodemailer')
 const app = express()
 
 // ---------- Postgres ----------
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: false, 
-      max: 10,
-      idleTimeoutMillis: 30000
-    })
-  : new Pool({
-      host: process.env.PGHOST || 'localhost',
-      port: Number(process.env.PGPORT || 5432),
-      user: process.env.PGUSER || 'postgres',
-      password: process.env.PGPASSWORD || 'postgres',
-      database: process.env.PGDATABASE || 'FLOWS',
-      ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false,
-      max: 10,
-      idleTimeoutMillis: 30000,
+const pool = new Pool({
+      host: 'localhost',
+      port: 5432,
+      user: 'postgres',
+      password: 'postgres',
+      database: 'FLOWS',
     })
 
 pool.on('connect', (client) => {
@@ -549,7 +539,7 @@ cleanupExpiredSessions()
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000) 
 
 // ---------- Avvio ----------
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3002
 app.listen(PORT, async () => {
   console.log(`API http://localhost:${PORT}`)
   try {
