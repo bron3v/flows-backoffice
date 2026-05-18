@@ -584,7 +584,43 @@ async function approve(u) {
 }
 
 async function reject(u) {
-  pending.value = pending.value.filter(x => x.id !== u.id)
+  const okC = confirm(
+    `Eliminare definitivamente la richiesta di ${u.email || u.name || u.id}?`
+  )
+
+  if (!okC) return
+
+  try {
+    const res = await fetch(`/admin/api/approvals/${encodeURIComponent(String(u.id))}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+
+    let payload = {}
+
+    const ct = res.headers.get('content-type') || ''
+    if (ct.includes('application/json')) {
+      payload = await res.json().catch(() => ({}))
+    } else {
+      payload = { message: await res.text().catch(() => '') }
+    }
+
+    if (!res.ok || payload?.ok !== true) {
+      const msg = payload?.message || `HTTP ${res.status}`
+      throw new Error(msg)
+    }
+
+    pending.value = pending.value.filter(x => String(x.id) !== String(u.id))
+
+    try {
+      localStorage.setItem('flows_pending', JSON.stringify(pending.value))
+    } catch {}
+
+    await loadStats()
+  } catch (e) {
+    console.error('DELETE pending approval failed:', e)
+    alert(`Impossibile eliminare la richiesta: ${e.message}`)
+  }
 }
 
 async function removeUser(u) {
