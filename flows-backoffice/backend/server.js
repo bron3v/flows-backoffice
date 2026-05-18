@@ -622,53 +622,78 @@ adminApi.post('/approvals/approve', async (req, res) => {
   const client = await pool.connect()
 
   try {
-    const { id, requested_role } = req.body || {}
+    const { id, name, email, username, requested_role, role } = req.body || {}
 
-    if (!id) {
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    let request = null
+    let finalEmail = email ? String(email).trim().toLowerCase() : ''
+    let finalUsername = username ? String(username).trim().toLowerCase() : ''
+
+    if (id) {
+      const q = await client.query(
+        `
+        SELECT id, email, affiliation, note, status
+        FROM public.registration_requests
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [id]
+      )
+
+      request = q.rows[0]
+
+      if (!request) {
+        return res.status(404).json({
+          ok: false,
+          message: 'request_not_found'
+        })
+      }
+
+      if (request.status !== 'pending') {
+        return res.status(409).json({
+          ok: false,
+          message: 'request_not_pending'
+        })
+      }
+
+      finalEmail = String(request.email || '').trim().toLowerCase()
+      finalUsername = finalEmail
+    }
+
+    if (!finalUsername && finalEmail) {
+      finalUsername = finalEmail
+    }
+
+    if (!finalUsername && !finalEmail) {
       return res.status(400).json({
         ok: false,
-        message: 'missing_id'
+        message: 'missing_username_or_email'
       })
     }
 
-    const ALLOWED = new Set(['user', 'user_manager', 'logs_manager', 'admin'])
-    const finalRole = String(requested_role || 'user').toLowerCase()
-    const roleToAssign = ALLOWED.has(finalRole) ? finalRole : 'user'
+    if (finalEmail && !emailRe.test(finalEmail)) {
+      return res.status(400).json({
+        ok: false,
+        message: 'invalid_email'
+      })
+    }
+
+    const ALLOWED_ROLES = new Set([
+      'user',
+      'user_manager',
+      'logs_manager',
+      'admin'
+    ])
+
+    const requestedRoleValue = requested_role || role || 'user'
+    const finalRole = String(requestedRoleValue).toLowerCase()
+    const roleToAssign = ALLOWED_ROLES.has(finalRole) ? finalRole : 'user'
+
+    const plainPwd = genPassword()
+    const hash = await bcrypt.hash(plainPwd, 10)
 
     await client.query('BEGIN')
-
-    const requestResult = await client.query(
-      `
-      SELECT id, email, note, status
-      FROM public.registration_requests
-      WHERE id = $1
-      LIMIT 1
-      `,
-      [id]
-    )
-
-    const request = requestResult.rows[0]
-
-    if (!request) {
-      await client.query('ROLLBACK')
-
-      return res.status(404).json({
-        ok: false,
-        message: 'request_not_found'
-      })
-    }
-
-    if (request.status !== 'pending') {
-      await client.query('ROLLBACK')
-
-      return res.status(409).json({
-        ok: false,
-        message: 'request_not_pending'
-      })
-    }
-
-    const finalEmail = String(request.email || '').trim().toLowerCase()
-    const finalUsername = finalEmail
 
     const existingUser = await client.query(
       `
@@ -681,25 +706,13 @@ adminApi.post('/approvals/approve', async (req, res) => {
     )
 
     if (existingUser.rows.length > 0) {
-      await client.query(
-        `
-        UPDATE public.registration_requests
-        SET status = 'approved'
-        WHERE id = $1
-        `,
-        [id]
-      )
-
-      await client.query('COMMIT')
+      await client.query('ROLLBACK')
 
       return res.status(409).json({
         ok: false,
         message: 'user_exists'
       })
     }
-
-    const plainPwd = genPassword()
-    const hash = await bcrypt.hash(plainPwd, 10)
 
     const createdUser = await client.query(
       `
@@ -714,55 +727,122 @@ adminApi.post('/approvals/approve', async (req, res) => {
 
     const outUser = createdUser.rows[0]
 
-    await client.query(
-      `
-      UPDATE public.registration_requests
-      SET status = 'approved'
-      WHERE id = $1
-      `,
-      [id]
-    )
+    if (id) {
+      await client.query(
+        `
+        UPDATE public.registration_requests
+        SET status = 'approved'
+        WHERE id = $1
+        `,
+        [id]
+      )
+    }
 
     await client.query('COMMIT')
 
-    const subject = 'Il tuo accesso a Flows Backoffice'
-    const loginUrl = process.env.LOGIN_URL || 'http://localhost:5173/login'
+    if (finalEmail) {
+      const subject = 'Your FLOWS account has been approved'
+      const loginUrl = process.env.LOGIN_URL || 'http://localhost:5173/login'
 
-    const html = `
-      <p>Ciao,</p>
+      const displayName = name || finalUsername
+      const safeName = cleanHtmlValue(displayName)
+      const safeUsername = cleanHtmlValue(finalUsername)
+      const safePassword = cleanHtmlValue(plainPwd)
 
-      <p>il tuo account è stato approvato.</p>
+      const html = `
+        <div style="font-family: Arial, Helvetica, sans-serif; background-color: #f4f7f8; padding: 32px;">
+          <div style="max-width: 620px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+            
+            <div style="background-color: #14b8a6; padding: 28px 32px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; letter-spacing: 1px;">
+                FLOWS
+              </h1>
+            </div>
 
-      <p>
-        <b>Credenziali</b><br/>
-        Username: <code>${cleanHtmlValue(finalUsername)}</code><br/>
-        Password: <code>${cleanHtmlValue(plainPwd)}</code>
-      </p>
+            <div style="padding: 32px;">
+              <h2 style="margin-top: 0; color: #111827; font-size: 22px;">
+                Account approved
+              </h2>
 
-      <p>Accedi qui: <a href="${loginUrl}">${loginUrl}</a></p>
+              <p style="color: #374151; font-size: 15px; line-height: 1.6;">
+                Hello <strong>${safeName}</strong>,
+              </p>
 
-      <p>Per sicurezza, modifica la password dopo il primo accesso.</p>
-    `
+              <p style="color: #374151; font-size: 15px; line-height: 1.6;">
+                Your request to access <strong>FLOWS</strong> has been approved.
+                You can now log in using the credentials below.
+              </p>
 
-    const text = `Ciao,
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0 0 12px 0; color: #111827; font-size: 15px;">
+                  <strong>Username</strong><br>
+                  <code style="display: inline-block; margin-top: 6px; color: #0f766e; font-size: 15px;">
+                    ${safeUsername}
+                  </code>
+                </p>
 
-il tuo account è stato approvato.
+                <p style="margin: 0; color: #111827; font-size: 15px;">
+                  <strong>Temporary password</strong><br>
+                  <code style="display: inline-block; margin-top: 6px; color: #0f766e; font-size: 15px;">
+                    ${safePassword}
+                  </code>
+                </p>
+              </div>
 
-Credenziali:
+              <p style="color: #374151; font-size: 15px; line-height: 1.6;">
+                For security reasons, please change your password after your first login.
+              </p>
+
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${loginUrl}"
+                   style="background-color: #14b8a6; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-size: 15px; font-weight: bold; display: inline-block;">
+                  Log in to FLOWS
+                </a>
+              </div>
+
+              <p style="color: #6b7280; font-size: 13px; line-height: 1.6;">
+                If the button does not work, copy and paste this link into your browser:
+                <br>
+                <a href="${loginUrl}" style="color: #0f766e;">
+                  ${loginUrl}
+                </a>
+              </p>
+
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0;">
+
+              <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin-bottom: 0;">
+                This is an automatic message from FLOWS. Please do not reply to this email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `
+
+      const text = `Hello ${displayName},
+
+Your request to access FLOWS has been approved.
+
+You can now log in using the credentials below:
+
 Username: ${finalUsername}
-Password: ${plainPwd}
+Temporary password: ${plainPwd}
 
-Accedi: ${loginUrl}
+Login URL: ${loginUrl}
 
-Per sicurezza, modifica la password dopo il primo accesso.`
+For security reasons, please change your password after your first login.
 
-    await transporter.sendMail({
-      from: process.env.MAIL_FROM || process.env.SMTP_USER || 'no-reply@localhost',
-      to: process.env.MAIL_TO_OVERRIDE || finalEmail,
-      subject,
-      text,
-      html
-    })
+This is an automatic message from FLOWS. Please do not reply to this email.`
+
+      const mailInfo = await transporter.sendMail({
+        from: process.env.MAIL_FROM || process.env.SMTP_USER || 'no-reply@localhost',
+        to: process.env.MAIL_TO_OVERRIDE || finalEmail,
+        subject,
+        text,
+        html
+      })
+
+      console.log('[mail] approval sent:', mailInfo.messageId, mailInfo.response)
+    }
 
     return res.json({
       ok: true,
